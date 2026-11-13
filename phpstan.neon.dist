@@ -1,0 +1,14 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 8
+    ignoreErrors:
+        # The trait is for host models; nothing in the package itself uses it.
+        -
+            identifier: trait.unused
+            path: src/Concerns/HasMfa.php
+    paths:
+        - src
+        - database
+        - routes
