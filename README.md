@@ -64,7 +64,11 @@ $user = Mfa::loginWithSecret('staff', $email, 'authenticator', $code);
 
 Each login method returns the user on success and `null` otherwise, with one answer for every way it can fail. `Darvis\Mfa\Exceptions\ThrottledException` is thrown after too many tries.
 
-The link in the mail is handled by the package (`/mfa/link/{token}`) and lands on the guard's `home`.
+The link in the mail is handled by the package (`/mfa/link/{token}`) and lands on the guard's `home`. To land it on a route of your own instead, call `Mfa::linkUrlUsing(fn (string $token) => route('login.link', $token))`, call `Mfa::loginWithLink($token)` from that route and set `'link' => ['enabled' => false]`, so the package route is not registered at all.
+
+A published `config/mfa.php` only needs what differs from the defaults: each group is merged with the package defaults, so `'log' => ['enabled' => false]` keeps the other `log` settings. `guards` is the exception and is taken from your config as a whole.
+
+A code or link works once. After a login it stays behind as used, so opening the link again is logged for its owner, until `php artisan mfa:prune` (schedule it daily) removes it.
 
 ## Check your setup
 
@@ -84,6 +88,20 @@ php artisan mfa:link staff jan@example.com      # one time link for one user
 ```
 
 Users with another working channel keep using it. Only with `MFA_EMERGENCY_PASSWORD_ONLY=true`, and only for users without any working channel, a password alone is accepted. An emergency ends by itself, lasts at most `emergency.max_hours` and every login during it is logged.
+
+## Laravel Boost
+
+The package ships a Boost guideline and the `laravel-mfa-development` skill in `resources/boost`. Boost only installs those of third party packages listed under `packages` in your `boost.json`:
+
+```json
+{
+    "packages": [
+        "darvis/laravel-mfa"
+    ]
+}
+```
+
+Then run `php artisan boost:update`. An interactive `php artisan boost:install` or `boost:update` offers the package and writes that line for you; `boost:update` from a Composer script or with `--no-interaction` never adds a new package by itself. The skill also needs skills switched on in Boost. Boost reads only direct dependencies, so require the package in the application's own `composer.json`.
 
 ## Documentation
 

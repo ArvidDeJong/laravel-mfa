@@ -2,16 +2,19 @@
 
 namespace Darvis\Mfa;
 
+use Closure;
 use Darvis\Mfa\Contracts\Channel;
 use Darvis\Mfa\Contracts\SendsChallenge;
 use Darvis\Mfa\Contracts\VerifiesSecret;
 use Darvis\Mfa\Events\ChallengeSent;
 use Darvis\Mfa\Events\LoginAttempted;
+use Darvis\Mfa\Exceptions\ConfigurationException;
 use Darvis\Mfa\Exceptions\ThrottledException;
 use Darvis\Mfa\Models\Challenge;
 use Darvis\Mfa\Models\LoginAttempt;
 use Darvis\Mfa\Support\ChannelRegistry;
 use Darvis\Mfa\Support\Emergency;
+use Darvis\Mfa\Support\IssuedChallenge;
 use Darvis\Mfa\Support\MfaConfig;
 use Darvis\Mfa\Support\Subject;
 use Illuminate\Auth\SessionGuard;
@@ -36,11 +39,63 @@ class Mfa
 
     private const SESSION_SMS_COUNT = 'mfa.sms_sent';
 
+    /** @var (Closure(Authenticatable, IssuedChallenge): void)|null */
+    private static ?Closure $mailSender = null;
+
+    /** @var (Closure(string): string)|null */
+    private static ?Closure $linkUrlResolver = null;
+
     public function __construct(
         private readonly ChannelRegistry $registry,
         private readonly Emergency $emergency,
         private readonly AuthFactory $auth,
     ) {}
+
+    /**
+     * Send the login mail yourself, for example with a Mailable in the
+     * application's own design. Pass null to go back to the package mail.
+     *
+     * @param  (Closure(Authenticatable, IssuedChallenge): void)|null  $callback
+     */
+    public static function sendMailUsing(?Closure $callback): void
+    {
+        self::$mailSender = $callback;
+    }
+
+    /**
+     * Point the mailed link at a route of the application, which then calls
+     * loginWithLink() itself. Pass null to go back to the package route.
+     *
+     * @param  (Closure(string): string)|null  $callback  Receives the plain token, returns the URL.
+     */
+    public static function linkUrlUsing(?Closure $callback): void
+    {
+        self::$linkUrlResolver = $callback;
+    }
+
+    /**
+     * @return (Closure(Authenticatable, IssuedChallenge): void)|null
+     */
+    public static function mailSender(): ?Closure
+    {
+        return self::$mailSender;
+    }
+
+    /**
+     * @throws ConfigurationException When the package route is switched off and the application did not call linkUrlUsing().
+     */
+    public static function linkUrl(string $token): string
+    {
+        if (self::$linkUrlResolver !== null) {
+            return (self::$linkUrlResolver)($token);
+        }
+
+        if (! MfaConfig::linkEnabled()) {
+            throw new ConfigurationException('The MFA link route is switched off (mfa.link.enabled). Call Mfa::linkUrlUsing() to point the mailed link at a route of the application.');
+        }
+
+        return route('mfa.link', ['token' => $token]);
+    }
 
     /**
      * The channels configured for a guard, in the order of the config.
@@ -130,15 +185,16 @@ class Mfa
      * @param  string|null  $channel  A sending channel; the first available one when left out.
      *
      * @throws ThrottledException
+     * @throws ConfigurationException When the mail cannot carry a link, see linkUrl().
      */
     public function request(string $guard, string $identifier, ?string $channel = null): void
     {
-        $this->throttle('request', $guard, $identifier);
+        $this->throttle('request', $guard, $identifier, LoginAttempt::METHOD_REQUEST);
 
         $user = $this->findUser($guard, $identifier);
 
         if ($user === null || ! Subject::active($user)) {
-            $this->record($guard, $user === null ? LoginAttempt::UNKNOWN_ACCOUNT : LoginAttempt::INACTIVE, $channel, $identifier, $user);
+            $this->record($guard, $user === null ? LoginAttempt::UNKNOWN_ACCOUNT : LoginAttempt::INACTIVE, $channel, $identifier, $user, LoginAttempt::METHOD_REQUEST);
 
             return;
         }
@@ -153,6 +209,9 @@ class Mfa
 
         try {
             $sender->send($user, $issued);
+        } catch (ConfigurationException $exception) {
+            // A setup that cannot work is the developer's to see, not a failed delivery.
+            throw $exception;
         } catch (Throwable $exception) {
             // A failed delivery must look like any other request from the
             // outside, but the application owner has to hear about it.
@@ -171,29 +230,31 @@ class Mfa
     /**
      * Sign in with the code from a mail or text message.
      *
+     * @param  bool|null  $remember  Keep the user signed in; null follows the guard's "remember" setting.
+     *
      * @throws ThrottledException
      */
-    public function loginWithCode(string $guard, string $identifier, string $code): ?Authenticatable
+    public function loginWithCode(string $guard, string $identifier, string $code, ?bool $remember = null): ?Authenticatable
     {
-        $this->throttle('verify', $guard, $identifier);
+        $this->throttle('verify', $guard, $identifier, LoginAttempt::METHOD_CODE);
 
         $user = $this->findUser($guard, $identifier);
 
         if ($user === null) {
-            return $this->fail($guard, LoginAttempt::UNKNOWN_ACCOUNT, null, $identifier);
+            return $this->fail($guard, LoginAttempt::UNKNOWN_ACCOUNT, null, $identifier, null, LoginAttempt::METHOD_CODE);
         }
 
         $challenge = Challenge::findFor($guard, $user);
 
         if ($challenge === null || $challenge->hasExpired()) {
-            return $this->fail($guard, LoginAttempt::EXPIRED, $challenge?->channel, $identifier, $user);
+            return $this->fail($guard, LoginAttempt::EXPIRED, $challenge?->channel, $identifier, $user, LoginAttempt::METHOD_CODE);
         }
 
         if (! $challenge->matchesCode(trim($code))) {
-            return $this->fail($guard, LoginAttempt::INVALID, $challenge->channel, $identifier, $user);
+            return $this->fail($guard, LoginAttempt::INVALID, $challenge->channel, $identifier, $user, LoginAttempt::METHOD_CODE);
         }
 
-        return $this->complete($guard, $user, $challenge->channel, $identifier);
+        return $this->complete($guard, $user, $challenge->channel, LoginAttempt::METHOD_CODE, $identifier, false, $remember, $challenge);
     }
 
     /**
@@ -202,21 +263,21 @@ class Mfa
      *
      * @throws ThrottledException
      */
-    public function loginWithSecret(string $guard, string $identifier, string $channel, string $input): ?Authenticatable
+    public function loginWithSecret(string $guard, string $identifier, string $channel, string $input, ?bool $remember = null): ?Authenticatable
     {
-        $this->throttle('verify', $guard, $identifier);
+        $this->throttle('verify', $guard, $identifier, LoginAttempt::METHOD_SECRET);
 
         $user = $this->findUser($guard, $identifier);
 
         if ($user === null) {
-            return $this->fail($guard, LoginAttempt::UNKNOWN_ACCOUNT, $channel, $identifier);
+            return $this->fail($guard, LoginAttempt::UNKNOWN_ACCOUNT, $channel, $identifier, null, LoginAttempt::METHOD_SECRET);
         }
 
         $emergency = false;
 
         if (! in_array($channel, $this->available($guard, $user), true)) {
             if ($channel !== 'password' || ! $this->passwordOnlyAllowed($guard, $user)) {
-                return $this->fail($guard, LoginAttempt::INVALID, $channel, $identifier, $user);
+                return $this->fail($guard, LoginAttempt::INVALID, $channel, $identifier, $user, LoginAttempt::METHOD_SECRET);
             }
 
             $emergency = true;
@@ -225,16 +286,17 @@ class Mfa
         $verifier = $this->registry->get($channel);
 
         if (! $verifier instanceof VerifiesSecret || ! $verifier->enrolled($user) || ! $verifier->verify($user, $input)) {
-            return $this->fail($guard, LoginAttempt::INVALID, $channel, $identifier, $user);
+            return $this->fail($guard, LoginAttempt::INVALID, $channel, $identifier, $user, LoginAttempt::METHOD_SECRET);
         }
 
-        return $this->complete($guard, $user, $channel, $identifier, $emergency);
+        return $this->complete($guard, $user, $channel, LoginAttempt::METHOD_SECRET, $identifier, $emergency, $remember);
     }
 
     /**
-     * Sign in with the token from a mailed link.
+     * Sign in with the token from a mailed link. A link that was used or has
+     * expired is logged for its owner; a token that never existed is not.
      */
-    public function loginWithLink(string $token): ?Authenticatable
+    public function loginWithLink(string $token, ?bool $remember = null): ?Authenticatable
     {
         $challenge = Challenge::findByToken($token);
 
@@ -250,10 +312,10 @@ class Mfa
         }
 
         if ($challenge->hasExpired()) {
-            return $this->fail($guard, LoginAttempt::EXPIRED, $challenge->channel, null, $user);
+            return $this->fail($guard, LoginAttempt::EXPIRED, $challenge->channel, null, $user, LoginAttempt::METHOD_LINK);
         }
 
-        return $this->complete($guard, $user, $challenge->channel);
+        return $this->complete($guard, $user, $challenge->channel, LoginAttempt::METHOD_LINK, null, false, $remember, $challenge);
     }
 
     /**
@@ -270,7 +332,7 @@ class Mfa
     /**
      * Write a line to the login log and tell the application.
      */
-    public function record(string $guard, string $result, ?string $channel = null, ?string $identifier = null, ?Authenticatable $user = null): void
+    public function record(string $guard, string $result, ?string $channel = null, ?string $identifier = null, ?Authenticatable $user = null, ?string $method = null): void
     {
         if (MfaConfig::logEnabled()) {
             try {
@@ -280,6 +342,7 @@ class Mfa
                     'authenticatable_id' => $user === null ? null : Subject::id($user),
                     'identifier' => $identifier === null ? null : Str::limit($identifier, 250, ''),
                     'channel' => $channel,
+                    'method' => $method,
                     'result' => $result,
                     'ip' => request()->ip(),
                     'user_agent' => Str::limit((string) request()->userAgent(), 250, ''),
@@ -290,19 +353,29 @@ class Mfa
             }
         }
 
-        event(new LoginAttempted($guard, $result, $channel, $identifier, $user));
+        event(new LoginAttempted($guard, $result, $channel, $identifier, $user, $method));
     }
 
-    private function complete(string $guard, Authenticatable $user, string $channel, ?string $identifier = null, bool $emergency = false): ?Authenticatable
+    /**
+     * @param  Challenge|null  $used  The challenge the user proved, kept as consumed; null for a typed secret.
+     */
+    private function complete(string $guard, Authenticatable $user, string $channel, string $method, ?string $identifier = null, bool $emergency = false, ?bool $remember = null, ?Challenge $used = null): ?Authenticatable
     {
         if (! Subject::active($user)) {
-            return $this->fail($guard, LoginAttempt::INACTIVE, $channel, $identifier, $user);
+            return $this->fail($guard, LoginAttempt::INACTIVE, $channel, $identifier, $user, $method);
         }
 
-        // Every outstanding challenge dies with the one that was used.
-        Challenge::owned($guard, $user)->delete();
+        if ($used !== null && ! $used->consume()) {
+            // A second request with the same code or link lost the race.
+            return $this->fail($guard, LoginAttempt::EXPIRED, $channel, $identifier, $user, $method);
+        }
 
-        $this->guard($guard)->login($user, MfaConfig::remember($guard));
+        // Every other outstanding challenge dies with the one that was used.
+        Challenge::owned($guard, $user)
+            ->when($used !== null, fn ($query) => $query->whereKeyNot($used?->getKey()))
+            ->delete();
+
+        $this->guard($guard)->login($user, $remember ?? MfaConfig::remember($guard));
 
         if (request()->hasSession()) {
             $session = request()->session();
@@ -323,14 +396,14 @@ class Mfa
             RateLimiter::clear($this->throttleKey('verify', $guard, $identifier));
         }
 
-        $this->record($guard, $emergency ? LoginAttempt::EMERGENCY : LoginAttempt::SUCCEEDED, $channel, $identifier, $user);
+        $this->record($guard, $emergency ? LoginAttempt::EMERGENCY : LoginAttempt::SUCCEEDED, $channel, $identifier, $user, $method);
 
         return $user;
     }
 
-    private function fail(string $guard, string $result, ?string $channel, ?string $identifier, ?Authenticatable $user = null): null
+    private function fail(string $guard, string $result, ?string $channel, ?string $identifier, ?Authenticatable $user = null, ?string $method = null): null
     {
-        $this->record($guard, $result, $channel, $identifier, $user);
+        $this->record($guard, $result, $channel, $identifier, $user, $method);
 
         return null;
     }
@@ -370,12 +443,12 @@ class Mfa
     /**
      * @throws ThrottledException
      */
-    private function throttle(string $action, string $guard, string $identifier): void
+    private function throttle(string $action, string $guard, string $identifier, string $method): void
     {
         $key = $this->throttleKey($action, $guard, $identifier);
 
         if (RateLimiter::tooManyAttempts($key, MfaConfig::rateLimitAttempts())) {
-            $this->record($guard, LoginAttempt::THROTTLED, null, $identifier);
+            $this->record($guard, LoginAttempt::THROTTLED, null, $identifier, $this->findUser($guard, $identifier), $method);
 
             throw new ThrottledException(RateLimiter::availableIn($key));
         }

@@ -75,6 +75,16 @@ it('prunes expired challenges and old log lines', function () {
         ->and(LoginAttempt::query()->count())->toBe(0);
 });
 
+it('prunes used challenges and keeps usable ones', function () {
+    $used = Challenge::issue('staff', $this->staff(), 'mail', true)->challenge;
+    $used->consume();
+    $usable = Challenge::issue('staff', $this->staff('kim@example.com'), 'mail', true)->challenge;
+
+    $this->artisan('mfa:prune')->assertSuccessful();
+
+    expect(Challenge::query()->pluck('id')->all())->toBe([$usable->id]);
+});
+
 it('offers config, migrations, views and translations for publishing', function () {
     $paths = ServiceProvider::pathsToPublish(MfaServiceProvider::class);
 

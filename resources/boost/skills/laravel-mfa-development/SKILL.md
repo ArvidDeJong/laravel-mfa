@@ -24,7 +24,8 @@ Follow the guide that matches the application in `docs/migrating/` of the packag
 2. For every other session guard that signs in by mail, list it in `config/mfa.php`.
 3. Replace the calls into the application's own token or code classes with the `Mfa` facade.
 4. Delete the old token model, its migration (add a migration that drops the table), the mail class and the hand written rate limiting.
-5. Run `php artisan mfa:check` and the application's tests.
+5. Keeping an own link route or login log: `Mfa::linkUrlUsing()` plus `'link' => ['enabled' => false]`, and a listener on `LoginAttempted` plus `'log' => ['enabled' => false]`. Only set what differs; each config group is merged with the defaults.
+6. Schedule `php artisan mfa:prune` daily, then run `php artisan mfa:check` and the application's tests.
 
 Pending tokens need no data migration: they live for minutes.
 
@@ -38,6 +39,7 @@ Pending tokens need no data migration: they live for minutes.
 ## Testing in the host application
 
 ```php
+use Darvis\Mfa\Models\Challenge;
 use Darvis\Mfa\Notifications\LoginCodeNotification;
 use Illuminate\Support\Facades\Notification;
 
@@ -51,4 +53,7 @@ Notification::assertSentOnDemand(LoginCodeNotification::class, function ($notifi
 });
 
 expect(Mfa::loginWithCode('staff', 'jan@example.com', $code))->not->toBeNull();
+
+// The used challenge stays behind as consumed: check that none is usable, not that the table is empty.
+expect(Challenge::query()->get()->reject->hasExpired())->toBeEmpty();
 ```

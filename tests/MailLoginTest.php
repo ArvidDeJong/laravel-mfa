@@ -60,7 +60,7 @@ it('signs in on the right guard with the mailed code', function () {
     expect(Mfa::loginWithCode('staff', 'jan@example.com', $mail->code)?->is($staff))->toBeTrue()
         ->and(Auth::guard('staff')->check())->toBeTrue()
         ->and(Auth::guard('web')->check())->toBeFalse()
-        ->and(Challenge::query()->count())->toBe(0)
+        ->and(Challenge::query()->get()->reject->hasExpired())->toBeEmpty()
         ->and(LoginAttempt::query()->where('result', LoginAttempt::SUCCEEDED)->where('channel', 'mail')->count())->toBe(1);
 });
 
@@ -173,6 +173,74 @@ it('signs in on the link itself when confirming is off', function () {
     expect(Auth::guard('staff')->check())->toBeTrue();
 });
 
-it('answers 410 for a link that never existed', function () {
+it('answers 410 for a link that never existed, and logs nothing', function () {
     $this->get('/mfa/link/'.str_repeat('a', 64))->assertStatus(410);
+    $this->post('/mfa/link/'.str_repeat('a', 64))->assertStatus(410);
+
+    expect(LoginAttempt::query()->count())->toBe(0);
+});
+
+it('logs a used link that is opened again for its owner', function () {
+    $staff = $this->staff();
+    $mail = mailedLogin('staff', 'jan@example.com');
+
+    $this->post($mail->url)->assertRedirect('/cms');
+    Auth::guard('staff')->logout();
+
+    $this->post($mail->url)->assertStatus(410);
+
+    $attempt = LoginAttempt::query()->where('result', LoginAttempt::EXPIRED)->sole();
+
+    expect($attempt->method)->toBe(LoginAttempt::METHOD_LINK)
+        ->and($attempt->guard)->toBe('staff')
+        ->and($attempt->authenticatable_id)->toBe((string) $staff->id)
+        ->and(Auth::guard('staff')->check())->toBeFalse();
+});
+
+it('logs an expired link for its owner', function () {
+    $staff = $this->staff();
+    $mail = mailedLogin('staff', 'jan@example.com');
+
+    $this->travel(16)->minutes();
+
+    $this->post($mail->url)->assertStatus(410);
+
+    $attempt = LoginAttempt::query()->where('result', LoginAttempt::EXPIRED)->sole();
+
+    expect($attempt->method)->toBe(LoginAttempt::METHOD_LINK)
+        ->and($attempt->authenticatable_id)->toBe((string) $staff->id);
+});
+
+it('keeps the used challenge as consumed and drops the other ones of that user', function () {
+    $this->staff();
+    $mail = mailedLogin('staff', 'jan@example.com');
+    $used = Challenge::query()->sole();
+    $used->replicate()->fill(['token' => null])->save();
+
+    $this->post($mail->url)->assertRedirect('/cms');
+
+    $left = Challenge::query()->sole();
+
+    expect($left->is($used))->toBeTrue()
+        ->and($left->consumed_at)->not->toBeNull()
+        ->and($left->hasExpired())->toBeTrue();
+});
+
+it('lets only one of two requests with the same challenge consume it', function () {
+    $challenge = Challenge::issue('staff', $this->staff(), 'mail', true)->challenge;
+    $stale = $challenge->fresh();
+
+    expect($challenge->consume())->toBeTrue()
+        ->and($stale->consume())->toBeFalse();
+});
+
+it('lets a new request clear a consumed challenge', function () {
+    $this->staff();
+    $mail = mailedLogin('staff', 'jan@example.com');
+    Mfa::loginWithCode('staff', 'jan@example.com', $mail->code);
+
+    Notification::fake();
+    mailedLogin('staff', 'jan@example.com');
+
+    expect(Challenge::query()->sole()->consumed_at)->toBeNull();
 });

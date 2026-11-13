@@ -11,10 +11,12 @@ use Illuminate\Support\Facades\Facade;
  * @method static bool passwordOnlyAllowed(string $guard, \Illuminate\Contracts\Auth\Authenticatable $user)
  * @method static \Illuminate\Contracts\Auth\Authenticatable|null findUser(string $guard, string $identifier)
  * @method static void request(string $guard, string $identifier, ?string $channel = null)
- * @method static \Illuminate\Contracts\Auth\Authenticatable|null loginWithCode(string $guard, string $identifier, string $code)
- * @method static \Illuminate\Contracts\Auth\Authenticatable|null loginWithSecret(string $guard, string $identifier, string $channel, string $input)
- * @method static \Illuminate\Contracts\Auth\Authenticatable|null loginWithLink(string $token)
+ * @method static \Illuminate\Contracts\Auth\Authenticatable|null loginWithCode(string $guard, string $identifier, string $code, ?bool $remember = null)
+ * @method static \Illuminate\Contracts\Auth\Authenticatable|null loginWithSecret(string $guard, string $identifier, string $channel, string $input, ?bool $remember = null)
+ * @method static \Illuminate\Contracts\Auth\Authenticatable|null loginWithLink(string $token, ?bool $remember = null)
  * @method static bool linkIsUsable(string $token)
+ * @method static void sendMailUsing(?\Closure $callback)
+ * @method static void linkUrlUsing(?\Closure $callback)
  * @method static \Illuminate\Contracts\Auth\UserProvider provider(string $guard)
  *
  * @see \Darvis\Mfa\Mfa

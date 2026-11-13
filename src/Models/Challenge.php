@@ -19,6 +19,10 @@ use Illuminate\Support\Str;
  * Only hashes are stored. The plain values exist on the IssuedChallenge that
  * issue() returns, long enough to put them in a message.
  *
+ * A challenge that signed someone in stays behind with "consumed_at" set, so
+ * a link that is opened again can still be traced to its owner and logged.
+ * mfa:prune removes it.
+ *
  * @property int $id
  * @property string $guard
  * @property string $authenticatable_type
@@ -29,6 +33,7 @@ use Illuminate\Support\Str;
  * @property string $code
  * @property int $attempts
  * @property Carbon $expires_at
+ * @property Carbon|null $consumed_at
  */
 class Challenge extends Model
 {
@@ -88,11 +93,30 @@ class Challenge extends Model
     }
 
     /**
-     * Expired by the clock, or burned by too many wrong codes.
+     * Expired by the clock, burned by too many wrong codes, or used.
      */
     public function hasExpired(): bool
     {
-        return $this->expires_at->isPast() || $this->attempts >= MfaConfig::maxAttempts();
+        return $this->consumed_at !== null
+            || $this->expires_at->isPast()
+            || $this->attempts >= MfaConfig::maxAttempts();
+    }
+
+    /**
+     * Mark the challenge as used. Only one caller wins, so two requests with
+     * the same link or code cannot both sign in.
+     */
+    public function consume(): bool
+    {
+        $now = now();
+
+        $won = static::query()->whereKey($this->getKey())->whereNull('consumed_at')->update(['consumed_at' => $now]) === 1;
+
+        if ($won) {
+            $this->consumed_at = $now;
+        }
+
+        return $won;
     }
 
     /**
@@ -116,6 +140,7 @@ class Challenge extends Model
     {
         return [
             'attempts' => 'integer',
+            'consumed_at' => 'datetime',
             'expires_at' => 'datetime',
         ];
     }

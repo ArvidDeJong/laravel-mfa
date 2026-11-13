@@ -4,6 +4,10 @@ use Darvis\Mfa\Http\Controllers\LinkController;
 use Darvis\Mfa\Support\MfaConfig;
 use Illuminate\Support\Facades\Route;
 
+if (! MfaConfig::linkEnabled()) {
+    return;
+}
+
 Route::middleware(MfaConfig::linkMiddleware())
     ->prefix(MfaConfig::linkPrefix())
     ->group(function () {

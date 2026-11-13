@@ -23,6 +23,7 @@ return new class extends Migration
             $table->string('code');
             $table->unsignedSmallInteger('attempts')->default(0);
             $table->timestamp('expires_at');
+            $table->timestamp('consumed_at')->nullable();
             $table->timestamps();
 
             $table->index(['guard', 'authenticatable_type', 'authenticatable_id'], 'mfa_challenges_owner_index');

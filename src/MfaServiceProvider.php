@@ -23,7 +23,7 @@ class MfaServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../config/mfa.php', 'mfa');
+        $this->mergeConfig();
 
         $this->app->singleton(SmsManager::class, fn (Application $app) => new SmsManager($app));
         $this->app->singleton(Emergency::class, fn (Application $app) => new Emergency($app->make('cache.store')));
@@ -43,6 +43,34 @@ class MfaServiceProvider extends ServiceProvider
 
             return $registry;
         });
+    }
+
+    /**
+     * Merge the host config over the defaults one level deep, per group, so a
+     * host that sets only "log.enabled" keeps "log.retention_days".
+     * mergeConfigFrom() would replace the whole group.
+     *
+     * "guards" stays entirely the host's: a host that lists only "staff" must
+     * not get the default "web" guard back.
+     */
+    private function mergeConfig(): void
+    {
+        if ($this->app->configurationIsCached()) {
+            return;
+        }
+
+        $config = $this->app->make('config');
+        $defaults = require __DIR__.'/../config/mfa.php';
+        $host = $config->get('mfa', []);
+        $merged = $defaults;
+
+        foreach (is_array($host) ? $host : [] as $group => $value) {
+            $merged[$group] = $group !== 'guards' && is_array($value) && is_array($defaults[$group] ?? null)
+                ? array_merge($defaults[$group], $value)
+                : $value;
+        }
+
+        $config->set('mfa', $merged);
     }
 
     public function boot(Router $router): void

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Darvis\Mfa\MfaServiceProvider;
 use Darvis\Mfa\Support\MfaConfig;
 
 /**
@@ -25,6 +26,7 @@ it('returns the values the config file ships', function () {
         ->and(MfaConfig::emergencyMaxHours())->toBe($config['emergency']['max_hours'])
         ->and(MfaConfig::emergencyUnavailableUntil('mail'))->toBe($config['emergency']['unavailable_until']['mail'])
         ->and(MfaConfig::linkConfirm())->toBe($config['link']['confirm'])
+        ->and(MfaConfig::linkEnabled())->toBe($config['link']['enabled'])
         ->and(MfaConfig::linkMiddleware())->toBe($config['link']['middleware'])
         ->and(MfaConfig::linkPrefix())->toBe($config['link']['prefix'])
         ->and(MfaConfig::logEnabled())->toBe($config['log']['enabled'])
@@ -61,6 +63,40 @@ it('treats an empty setting as not set', function () {
 
     expect(MfaConfig::emergencyUnavailableUntil('mail'))->toBeNull()
         ->and(MfaConfig::smsDriverSetting('bird', 'access_key'))->toBeNull();
+});
+
+/**
+ * Merge a host config over the defaults the way the service provider does.
+ *
+ * @param  array<string, mixed>  $host
+ */
+function mergedConfig(array $host): void
+{
+    config(['mfa' => $host]);
+
+    (new MfaServiceProvider(app()))->register();
+}
+
+it('keeps the defaults of a group the host sets only partly', function () {
+    mergedConfig(['log' => ['enabled' => false]]);
+
+    expect(MfaConfig::logEnabled())->toBeFalse()
+        ->and(MfaConfig::logRetentionDays())->toBe(90)
+        ->and(MfaConfig::lifetimeMinutes())->toBe(15);
+});
+
+it('takes the guards entirely from the host', function () {
+    mergedConfig(['guards' => ['staff' => ['channels' => ['mail']]]]);
+
+    expect(MfaConfig::guards())->toBe(['staff'])
+        ->and(MfaConfig::hasGuard('web'))->toBeFalse();
+});
+
+it('keeps a deliberately empty list of the host', function () {
+    mergedConfig(['link' => ['middleware' => []]]);
+
+    expect(MfaConfig::linkMiddleware())->toBe([])
+        ->and(MfaConfig::linkPrefix())->toBe('mfa');
 });
 
 it('is the only place in the package that reads the config', function () {

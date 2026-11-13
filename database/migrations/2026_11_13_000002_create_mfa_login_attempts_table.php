@@ -19,6 +19,7 @@ return new class extends Migration
             $table->string('authenticatable_id')->nullable();
             $table->string('identifier')->nullable();
             $table->string('channel')->nullable();
+            $table->string('method')->nullable();
             $table->string('result');
             $table->string('ip', 45)->nullable();
             $table->string('user_agent')->nullable();

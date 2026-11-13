@@ -17,7 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mfa.emergency` middleware that ends an emergency session once the emergency is over.
 - `php artisan mfa:check` reports per guard whether login survives the loss of one outside service; `--strict` fails for use in CI.
 - `php artisan mfa:link` prints a one time login link for a user who cannot be reached.
-- `php artisan mfa:prune` removes expired challenges and old login log lines.
+- `php artisan mfa:prune` removes expired and used challenges and old login log lines.
 - Login log in `mfa_login_attempts` and the `LoginAttempted` and `ChallengeSent` events.
 - Mailed links show a confirm button by default, so mail scanners cannot use a link up.
+- `Mfa::sendMailUsing()` to send the login mail with the application's own Mailable, and `Mfa::linkUrlUsing()` to land the mailed link on a route of the application.
+- `link.enabled` (default `true`) and `MfaConfig::linkEnabled()`: switch the package link routes off when the application lands the link on a route of its own. `Mfa::linkUrl()` then throws a `Darvis\Mfa\Exceptions\ConfigurationException` (a `LogicException`) unless `Mfa::linkUrlUsing()` is set. `Mfa::request()` lets that exception through instead of hiding it like a failed delivery, so a login mail without a link route fails loudly.
+- A challenge that signed someone in stays behind as used (`consumed_at`) instead of being deleted, so a link that is opened again is logged as `expired` for its owner. Only one request can use a challenge, so a double click cannot sign in twice. A token that never existed is still not logged.
+- The host config is merged over the defaults one level deep, per group: a host that sets only `log.enabled` keeps `log.retention_days`. `guards` is taken from the host as a whole, so the default `web` guard does not come back next to a host's own guards.
 - Translations in English and Dutch.

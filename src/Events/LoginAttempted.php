@@ -16,6 +16,7 @@ class LoginAttempted
         public readonly ?string $channel = null,
         public readonly ?string $identifier = null,
         public readonly ?Authenticatable $user = null,
+        public readonly ?string $method = null,
     ) {}
 
     public function succeeded(): bool

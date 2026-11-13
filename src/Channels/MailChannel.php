@@ -3,6 +3,7 @@
 namespace Darvis\Mfa\Channels;
 
 use Darvis\Mfa\Contracts\SendsChallenge;
+use Darvis\Mfa\Mfa;
 use Darvis\Mfa\Notifications\LoginCodeNotification;
 use Darvis\Mfa\Support\IssuedChallenge;
 use Darvis\Mfa\Support\Subject;
@@ -36,6 +37,12 @@ class MailChannel implements SendsChallenge
 
     public function send(Authenticatable $user, IssuedChallenge $issued): void
     {
+        if (Mfa::mailSender() !== null) {
+            (Mfa::mailSender())($user, $issued);
+
+            return;
+        }
+
         $email = $issued->challenge->recipient ?? Subject::email($user);
 
         if ($email === null) {

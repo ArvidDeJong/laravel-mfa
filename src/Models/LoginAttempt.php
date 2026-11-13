@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $authenticatable_id
  * @property string|null $identifier
  * @property string|null $channel
+ * @property string|null $method
  * @property string $result
  * @property string|null $ip
  * @property string|null $user_agent
@@ -41,6 +42,14 @@ class LoginAttempt extends Model
     public const THROTTLED = 'throttled';
 
     public const UNKNOWN_ACCOUNT = 'unknown_account';
+
+    public const METHOD_CODE = 'code';
+
+    public const METHOD_LINK = 'link';
+
+    public const METHOD_REQUEST = 'request';
+
+    public const METHOD_SECRET = 'secret';
 
     public const UPDATED_AT = null;
 

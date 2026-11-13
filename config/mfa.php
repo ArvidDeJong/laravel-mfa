@@ -78,10 +78,15 @@ return [
     | signs in. Mail scanners that open every link then cannot burn the link
     | before its owner gets to it.
     |
+    | Turn "enabled" off when the application lands the link on a route of
+    | its own (Mfa::linkUrlUsing()): the package routes are then not
+    | registered at all.
+    |
     */
 
     'link' => [
         'confirm' => true,
+        'enabled' => true,
         'middleware' => ['web'],
         'prefix' => 'mfa',
     ],

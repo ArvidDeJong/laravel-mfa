@@ -2,6 +2,7 @@
 
 namespace Darvis\Mfa\Support;
 
+use Darvis\Mfa\Mfa;
 use Darvis\Mfa\Models\Challenge;
 
 /**
@@ -21,7 +22,7 @@ class IssuedChallenge
      */
     public function url(): ?string
     {
-        return $this->token === null ? null : route('mfa.link', ['token' => $this->token]);
+        return $this->token === null ? null : Mfa::linkUrl($this->token);
     }
 
     public function minutes(): int

@@ -96,6 +96,14 @@ class MfaConfig
     }
 
     /**
+     * Whether the package registers its own link routes.
+     */
+    public static function linkEnabled(): bool
+    {
+        return config('mfa.link.enabled') !== false;
+    }
+
+    /**
      * A deliberately empty list is a choice; only a non-array falls back.
      *
      * @return list<string>

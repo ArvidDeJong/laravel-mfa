@@ -48,7 +48,7 @@ class LinkCommand extends Command
         $minutes = min(60, max(1, (int) $this->option('minutes')));
         $issued = Challenge::issue($guard, $user, 'link', true, null, $minutes);
 
-        $mfa->record($guard, LoginAttempt::EMERGENCY_LINK_ISSUED, 'link', $identifier, $user);
+        $mfa->record($guard, LoginAttempt::EMERGENCY_LINK_ISSUED, 'link', $identifier, $user, LoginAttempt::METHOD_LINK);
 
         $this->components->info("Valid for {$minutes} minutes, for one login:");
         $this->line((string) $issued->url());

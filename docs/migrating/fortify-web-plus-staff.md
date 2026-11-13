@@ -55,6 +55,8 @@ Set `home` to the path a login redirects to today and `remember` to what the old
 
 When the old code used another lifetime or number of tries, set `challenge.lifetime_minutes` and `challenge.max_attempts` to match.
 
+Only list what differs from the defaults. Each group is merged with the package defaults, so `'challenge' => ['lifetime_minutes' => 10]` keeps `code_length` and `max_attempts`. `guards` is the exception: it is taken as a whole, so the default `web` guard is gone once you list `staff`.
+
 ## 4. Replace the login logic
 
 In the login component or controller, replace the old calls. Keep the screen, its fields and its texts.
@@ -64,7 +66,7 @@ In the login component or controller, replace the old calls. Keep the screen, it
 | Create a token and send the mail | `Mfa::request('staff', $email);` |
 | Look up the token, compare the code, call `login()` | `$user = Mfa::loginWithCode('staff', $email, $code);` |
 | Rate limiter calls around both | Remove; catch `ThrottledException` instead |
-| Writing to the login log | Remove; the package logs every attempt |
+| Writing to the login log | Remove; the package logs every attempt. To keep the application's own log, write it from a listener on `Darvis\Mfa\Events\LoginAttempted` and set `'log' => ['enabled' => false]` |
 | Check on `is_active` | Remove; the package refuses inactive accounts |
 
 A complete Livewire example:
@@ -114,19 +116,34 @@ public function signInWithCode(): void
 
 The package regenerates the session, marks the password as confirmed and sets `last login` in its own log. If the application keeps a `last_login_at` column, set it after a successful login.
 
-## 5. Remove the old link route
+## 5. Remove the old link route, or keep it
 
 The link in the mail now points at the package (`/mfa/link/{token}`), which shows a confirm button and redirects to `home`.
 
 1. Remove the old link route and the `mount($token)` branch (or controller method) that handled it.
 2. Search the application for the old route name and remove the leftovers.
 
+To keep the old route and its screen instead, point the mail at it and switch the package route off, so there is only one way in:
+
+```php
+// AppServiceProvider::boot()
+Mfa::linkUrlUsing(fn (string $token): string => route('cms.login.link', $token));
+```
+
+```php
+// config/mfa.php
+'link' => ['enabled' => false],
+```
+
+That route calls `Mfa::loginWithLink($token)` on the click of a button, not on opening the link: mail scanners open links.
+
 ## 6. Delete what is no longer used
 
 1. The token model and its factory.
 2. The mail or notification class and its view.
 3. Add a migration that drops the old token table. Do not edit the old migration.
-4. Tests of the deleted classes. Rewrite the login tests against the `Mfa` facade (see the skill for a test example).
+4. Tests of the deleted classes. Rewrite the login tests against the `Mfa` facade (see the skill for a test example). A used code or link stays behind as consumed until `mfa:prune`, so a test that expected no token row after a login now checks that no usable challenge is left.
+5. Schedule `php artisan mfa:prune` daily, in place of any pruning of the old token table.
 
 Keep the old login log table when its history matters. New attempts are in `mfa_login_attempts`.
 
