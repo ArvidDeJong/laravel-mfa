@@ -127,25 +127,35 @@ class Overview
         $provider = $this->mfa->provider($guard);
 
         if (! $provider instanceof EloquentUserProvider) {
-            return new Paginator([], 0, $perPage);
+            return new Paginator($this->noUsers(), 0, $perPage);
         }
 
         $column = MfaConfig::identifier($guard);
         $search = trim($search);
 
-        /** @var Model $model */
-        $model = $provider->createModel();
-
-        return $model->newQuery()
+        /** @var Paginator<int, array{user: Authenticatable, identifier: string, channels: list<string>, fallback: bool}> $users */
+        $users = $provider->createModel()->newQuery()
             ->when($search !== '', fn (Builder $query) => $query->where($column, 'like', '%'.$search.'%'))
             ->orderBy($column)
             ->paginate($perPage, ['*'], $pageName)
-            ->through(fn (Model $user) => $user instanceof Authenticatable ? [
+            ->through(fn (Model&Authenticatable $user): array => [
                 'user' => $user,
                 'identifier' => (string) $user->getAttribute($column),
                 'channels' => $this->channelsOf($guard, $user),
                 'fallback' => $this->hasFallback($guard, $user),
-            ] : []);
+            ]);
+
+        return $users;
+    }
+
+    /**
+     * The rows for a guard whose users are not Eloquent models: none, typed.
+     *
+     * @return list<array{user: Authenticatable, identifier: string, channels: list<string>, fallback: bool}>
+     */
+    private function noUsers(): array
+    {
+        return [];
     }
 
     /**

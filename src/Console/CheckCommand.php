@@ -9,7 +9,6 @@ use Darvis\Mfa\Support\MfaConfig;
 use Darvis\Mfa\Support\Overview;
 use Illuminate\Auth\EloquentUserProvider;
 use Illuminate\Console\Command;
-use Illuminate\Contracts\Auth\Authenticatable;
 
 /**
  * Reports, per guard, whether login survives the loss of one outside service
@@ -72,10 +71,12 @@ class CheckCommand extends Command
         $total = 0;
         $covered = 0;
 
+        $overview = $this->laravel->make(Overview::class);
+
         foreach ($provider->createModel()->newQuery()->lazy() as $user) {
             $total++;
 
-            if ($user instanceof Authenticatable && $this->laravel->make(Overview::class)->hasFallback($guard, $user)) {
+            if ($overview->hasFallback($guard, $user)) {
                 $covered++;
             }
         }
