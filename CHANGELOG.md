@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-17
+
 ### Security
 
 - Wrong codes and secrets for one account are now also counted over every address together (`rate_limit.account_attempts`, 20 in `rate_limit.account_decay_seconds`, 15 minutes), so guessing spread over many addresses stops as well. Asking for a mail and opening its link are not held back, so the owner of an account under attack still gets in. Set `account_attempts` to 0 to switch it off.
