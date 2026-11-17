@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Wrong codes and secrets for one account are now also counted over every address together (`rate_limit.account_attempts`, 20 in `rate_limit.account_decay_seconds`, 15 minutes), so guessing spread over many addresses stops as well. Asking for a mail and opening its link are not held back, so the owner of an account under attack still gets in. Set `account_attempts` to 0 to switch it off.
+- Failed logins from an IPv6 address are counted and blocked for its whole /64 (`firewall.ipv6_prefix`), the size of one connection, instead of for the single address. The rate limit follows the same network. IPv4 is unchanged; 128 goes back to single addresses.
+- The login mail and text message are sent after the response (`challenge.send_after_response`, on by default), so the screen answers as fast for an address that exists as for one that does not. No queue worker is needed; commands and tests still send at once.
+
+### Changed
+
+- A text message counts towards the session's limit when it is issued, not after its delivery.
+
 ## [1.0.0] - 2026-11-17
 
 ### Added

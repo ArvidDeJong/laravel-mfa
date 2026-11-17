@@ -33,6 +33,7 @@ try {
 - During a provider outage use `php artisan mfa:emergency mail --until=18:00` and `php artisan mfa:link {guard} {email}`. Never switch the second step off by hand in code.
 - Put the `mfa.emergency` middleware on the routes behind the login when `emergency.allow_password_only` is used.
 - Text message driver: `MFA_SMS_DRIVER` is `log` (default, sends nothing), `messagebird` or `bird`.
+- Do not add your own rate limiting, account lockout or queue around the login: the package limits per account and address, per account over every address, blocks IPv6 per /64, and sends the mail after the response (`challenge.send_after_response`). In a feature test the mail is sent at once.
 - Catch `Darvis\Mfa\Exceptions\BlockedException` next to `ThrottledException`: the firewall refused the address. Its message may be shown as is.
 - Firewall: `firewall.enabled`, fixed lists `allow`, `deny` and `locations` in the config, and rules in the database through the firewall screen or `php artisan mfa:allow-ip`. Do not write your own IP allow list, country filter or failed login block next to it.
 - Routes that should only work on site get the `mfa.location` middleware (optionally `mfa.location:staff`); routes behind a login get `mfa.firewall:staff` to end a session from an address that is not let in. That middleware leaves out the block for failed logins (it stops new logins only); a login screen asks `Firewall::decide($ip, $guard)` and gets the block too.

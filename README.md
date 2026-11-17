@@ -128,6 +128,10 @@ To switch a channel off for one account, implement `Darvis\Mfa\Contracts\Restric
 
 Each login method returns the user on success and `null` otherwise, with one answer for every way it can fail. `Darvis\Mfa\Exceptions\ThrottledException` is thrown after too many tries.
 
+Tries are limited twice: per account and address together (`rate_limit.attempts`), and per account over every address (`rate_limit.account_attempts`), so a guess spread over many addresses stops as well. The second limit never holds back asking for a mail or opening its link, so the owner of an account under attack still gets in.
+
+The mail or text message leaves after the response is sent (`challenge.send_after_response`). The screen answers just as fast for an address that exists as for one that does not, and a slow mail server does not hold up the login. It needs no queue worker; commands and tests send at once.
+
 The link in the mail is handled by the package (`/mfa/link/{token}`) and lands on the guard's `home`. To land it on a route of your own instead, call `Mfa::linkUrlUsing(fn (string $token) => route('login.link', $token))`, call `Mfa::loginWithLink($token)` from that route and set `'link' => ['enabled' => false]`, so the package route is not registered at all.
 
 A published `config/mfa.php` only needs what differs from the defaults: each group is merged with the package defaults, so `'log' => ['enabled' => false]` keeps the other `log` settings. `guards` is the exception and is taken from your config as a whole.
@@ -229,6 +233,8 @@ Put `mfa.firewall` after `auth` in a group behind a login, so a guest still reac
 
 The block for failed logins stops new logins only. Behind a login the middleware leaves it out, so one colleague with a wrong password does not sign out the whole office; the deny list, the allow list and the country filter still apply. Ask the same yourself with `Firewall::decide($ip, $guard, ignoreBlock: true)`.
 
+An IPv6 address is counted and blocked as its whole /64 (`firewall.ipv6_prefix`), the size of one connection: a single IPv6 address would be swapped for the next one in a second. IPv4 addresses are blocked one by one.
+
 A rule that ended, such as a lifted block, stays in the table for `log.retention_days` and is then removed by `mfa:prune`.
 
 The country filter can be set per guard. This keeps the CMS to the Netherlands and leaves the visitors of the site alone:
@@ -285,7 +291,7 @@ Yes. Set `countries` on the guard of the CMS, such as `['NL']`, and the country 
 
 ### Does it block brute force attacks on the login?
 
-Yes, with the firewall on. After `firewall.block_after_attempts` wrong tries an IP address is blocked for `firewall.block_minutes`. Somebody who recognises the address can lift the block on the firewall screen, or with `php artisan mfa:unblock-ip`.
+Yes, with the firewall on. After `firewall.block_after_attempts` wrong tries an IP address is blocked for `firewall.block_minutes`. For IPv6 that is the whole /64 of the connection. Separately, and also with the firewall off, wrong tries for one account are counted over every address together, so an attack spread over many addresses stops as well. Somebody who recognises the address can lift the block on the firewall screen, or with `php artisan mfa:unblock-ip`.
 
 ### Does it work with Laravel Fortify, Breeze or Jetstream?
 

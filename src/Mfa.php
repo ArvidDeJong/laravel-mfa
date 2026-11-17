@@ -233,24 +233,48 @@ class Mfa
 
         $issued = Challenge::issue($guard, $user, $sender->name(), $sender->withLink());
 
-        try {
-            $sender->send($user, $issued);
-        } catch (ConfigurationException $exception) {
-            // A setup that cannot work is the developer's to see, not a failed delivery.
-            throw $exception;
-        } catch (Throwable $exception) {
-            // A failed delivery must look like any other request from the
-            // outside, but the application owner has to hear about it.
-            report($exception);
+        // A link route that cannot work is the developer's to see, and now:
+        // further down the message may only go out after the response.
+        $issued->url();
 
-            return;
-        }
-
+        // Counted here and not after the delivery: by then the session may
+        // already be saved.
         if ($sender->name() === 'sms') {
             $this->countSms();
         }
 
-        event(new ChallengeSent($issued->challenge, $user));
+        $deliver = function () use ($sender, $user, $issued): void {
+            try {
+                $sender->send($user, $issued);
+            } catch (ConfigurationException $exception) {
+                // A setup that cannot work is the developer's to see, not a failed delivery.
+                throw $exception;
+            } catch (Throwable $exception) {
+                // A failed delivery must look like any other request from the
+                // outside, but the application owner has to hear about it.
+                report($exception);
+
+                return;
+            }
+
+            event(new ChallengeSent($issued->challenge, $user));
+        };
+
+        if (! MfaConfig::sendAfterResponse() || app()->runningInConsole()) {
+            $deliver();
+
+            return;
+        }
+
+        // After the response the screen has answered as fast as it does for
+        // an address that does not exist, however slow the mail server is.
+        app()->terminating(function () use ($deliver): void {
+            try {
+                $deliver();
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        });
     }
 
     /**
@@ -490,6 +514,7 @@ class Mfa
         if ($identifier !== null) {
             RateLimiter::clear($this->throttleKey('request', $guard, $identifier));
             RateLimiter::clear($this->throttleKey('verify', $guard, $identifier));
+            RateLimiter::clear($this->accountKey($guard, $identifier));
         }
 
         $this->record($guard, $emergency ? LoginAttempt::EMERGENCY : LoginAttempt::SUCCEEDED, $channel, $identifier, $user, $method);
@@ -577,19 +602,38 @@ class Mfa
     private function throttle(string $action, string $guard, string $identifier, string $method): void
     {
         $key = $this->throttleKey($action, $guard, $identifier);
+        $account = $this->accountKey($guard, $identifier);
 
-        if (RateLimiter::tooManyAttempts($key, MfaConfig::rateLimitAttempts())) {
-            $this->record($guard, LoginAttempt::THROTTLED, null, $identifier, $this->findUser($guard, $identifier), $method);
+        // Guessing at one account is also counted over every address
+        // together. Asking for a mail is not: whoever is under attack must
+        // still be able to get a link.
+        $limits = [[$key, MfaConfig::rateLimitAttempts(), MfaConfig::rateLimitDecaySeconds()]];
 
-            throw new ThrottledException(RateLimiter::availableIn($key));
+        if ($action === 'verify' && MfaConfig::rateLimitAccountAttempts() > 0) {
+            $limits[] = [$account, MfaConfig::rateLimitAccountAttempts(), MfaConfig::rateLimitAccountDecaySeconds()];
         }
 
-        RateLimiter::hit($key, MfaConfig::rateLimitDecaySeconds());
+        foreach ($limits as [$limit, $attempts]) {
+            if (RateLimiter::tooManyAttempts($limit, $attempts)) {
+                $this->record($guard, LoginAttempt::THROTTLED, null, $identifier, $this->findUser($guard, $identifier), $method);
+
+                throw new ThrottledException(RateLimiter::availableIn($limit));
+            }
+        }
+
+        foreach ($limits as [$limit, , $decay]) {
+            RateLimiter::hit($limit, $decay);
+        }
     }
 
     private function throttleKey(string $action, string $guard, string $identifier): string
     {
-        return Str::transliterate('mfa|'.$action.'|'.$guard.'|'.Str::lower(trim($identifier)).'|'.request()->ip());
+        return $this->accountKey($guard, $identifier, $action).'|'.Firewall::network((string) request()->ip());
+    }
+
+    private function accountKey(string $guard, string $identifier, string $action = 'account'): string
+    {
+        return Str::transliterate('mfa|'.$action.'|'.$guard.'|'.Str::lower(trim($identifier)));
     }
 
     /**

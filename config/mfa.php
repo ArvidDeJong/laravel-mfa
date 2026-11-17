@@ -10,12 +10,19 @@ return [
     | A challenge is one pending login: the code that was mailed or texted and,
     | for mail, the link next to it. Only hashes are stored.
     |
+    | send_after_response: the mail or text message goes out once the response
+    | is on its way to the browser. The screen then answers just as fast for an
+    | address that exists as for one that does not, and a slow mail server does
+    | not hold up the login screen. It needs no queue worker. Commands and
+    | tests send at once.
+    |
     */
 
     'challenge' => [
         'code_length' => 6,
         'lifetime_minutes' => 15,
         'max_attempts' => 5,
+        'send_after_response' => true,
     ],
 
     /*
@@ -70,6 +77,10 @@ return [
     | Addresses in allow and locations are never blocked for failed logins,
     | so one typo cannot lock out a whole office.
     |
+    | ipv6_prefix: failed logins from an IPv6 address are counted and blocked
+    | for its whole /64, the size of one connection. A single address would be
+    | swapped for the next one in a second. 128 goes back to single addresses.
+    |
     | countries: ISO codes that may sign in, such as ['NL', 'BE']. Empty means
     | no country filter. A guard can have a list of its own (guards.*.countries),
     | which is how a CMS guard is kept to one country while the visitors of the
@@ -93,6 +104,7 @@ return [
         'country_header' => 'CF-IPCountry',
         'deny' => [],
         'enabled' => (bool) env('MFA_FIREWALL', false),
+        'ipv6_prefix' => 64,
         'locations' => [],
     ],
 
@@ -182,11 +194,19 @@ return [
     | Rate limit
     |--------------------------------------------------------------------------
     |
-    | Per action, guard, identifier and IP address.
+    | attempts, decay_seconds: per action, guard, identifier and IP address.
+    |
+    | account_attempts, account_decay_seconds: wrong codes and secrets for one
+    | account, counted over every address together, so a guess spread over a
+    | thousand addresses stops as well. Asking for a mail and opening its link
+    | are never held back by it: somebody who is being attacked still gets in
+    | through the link. 0 switches it off.
     |
     */
 
     'rate_limit' => [
+        'account_attempts' => 20,
+        'account_decay_seconds' => 900,
         'attempts' => 5,
         'decay_seconds' => 60,
     ],

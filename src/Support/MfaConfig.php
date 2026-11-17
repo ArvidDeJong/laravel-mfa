@@ -77,6 +77,11 @@ class MfaConfig
         return max(1, (int) config('mfa.challenge.lifetime_minutes'));
     }
 
+    public static function sendAfterResponse(): bool
+    {
+        return config('mfa.challenge.send_after_response') !== false;
+    }
+
     public static function maxAttempts(): int
     {
         return max(1, (int) config('mfa.challenge.max_attempts'));
@@ -162,6 +167,14 @@ class MfaConfig
         return max(1, (int) config('mfa.firewall.block_after_attempts'));
     }
 
+    /**
+     * The size of the IPv6 network that failed logins count and block.
+     */
+    public static function firewallIpv6Prefix(): int
+    {
+        return min(128, max(16, (int) (config('mfa.firewall.ipv6_prefix') ?? 64)));
+    }
+
     public static function firewallBlockMinutes(): int
     {
         return max(1, (int) config('mfa.firewall.block_minutes'));
@@ -230,6 +243,19 @@ class MfaConfig
     public static function logRetentionDays(): int
     {
         return max(1, (int) config('mfa.log.retention_days'));
+    }
+
+    /**
+     * Wrong tries allowed per account over every address; 0 is off.
+     */
+    public static function rateLimitAccountAttempts(): int
+    {
+        return max(0, (int) config('mfa.rate_limit.account_attempts'));
+    }
+
+    public static function rateLimitAccountDecaySeconds(): int
+    {
+        return max(1, (int) config('mfa.rate_limit.account_decay_seconds'));
     }
 
     public static function rateLimitAttempts(): int
