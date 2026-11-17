@@ -122,7 +122,7 @@ it('says until when a block lasts, and remembers who lifted it', function () {
     $verdict = app(Firewall::class)->decide('127.0.0.1', 'staff');
 
     expect($verdict->reason)->toBe(Verdict::TOO_MANY_FAILURES)
-        ->and((int) round(now()->diffInMinutes($verdict->until)))->toBe(15);
+        ->and(abs(now()->addMinutes(15)->getTimestamp() - $verdict->until->getTimestamp()))->toBeLessThan(5);
 
     try {
         Mfa::request('staff', 'jan@example.com');

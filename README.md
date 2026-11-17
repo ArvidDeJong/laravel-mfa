@@ -4,7 +4,7 @@
 
 What sets it apart: login that survives an outage. The package warns you when every way in leans on the same outside service, and gives you a controlled emergency mode for the day your mail or SMS provider goes down.
 
-> **Status:** in development, not released yet. Passkeys and the documentation site follow before 1.0.
+> **Status:** stable since 1.0.0. Passkeys and the documentation site follow in a later release.
 
 ## In short
 
@@ -327,7 +327,11 @@ See [docs/](docs/), including the [migration guides](docs/migrating/) for moving
 
 ## Support the package
 
-If this package helps you, a star on [GitHub](https://github.com/ArvidDeJong/laravel-mfa) helps others find it.
+If darvis/laravel-mfa saves you time, buy me a beer 🍺: [sponsor me on GitHub](https://github.com/sponsors/ArvidDeJong). A star on [GitHub](https://github.com/ArvidDeJong/laravel-mfa) helps others find it.
+
+## Maintainer
+
+Built and maintained by [Arvid de Jong](https://github.com/ArvidDeJong) of [ARVID.NL](https://arvid.nl).
 
 ## Contributing
 
