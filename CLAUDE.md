@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Tables: `mfa_challenges`, `mfa_factors`, `mfa_login_attempts`
 - Tables also: `mfa_firewall_rules`
 - Commands: `mfa:check`, `mfa:emergency`, `mfa:link`, `mfa:prune`, `mfa:allow-ip`, `mfa:unblock-ip`, `mfa:geoip-update`
-- Status: pre release. Not built yet: the `passkey` channel (on `laravel/passkeys`), password plus second step as one flow, the docs site, the install command.
+- Status: released, first version 1.0.0. Not built yet: the `passkey` channel (on `laravel/passkeys`), password plus second step as one flow, the docs site, the install command.
 
 ## Architecture
 

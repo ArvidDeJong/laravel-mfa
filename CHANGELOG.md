@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-17
+
 ### Added
 
 - Login channels per guard, configured in `config/mfa.php`: `mail` (one mail with a code and a link), `sms`, `authenticator` (TOTP), `recovery` and `password`.
