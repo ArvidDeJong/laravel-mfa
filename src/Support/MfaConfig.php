@@ -50,6 +50,18 @@ class MfaConfig
         return (string) config("mfa.guards.{$guard}.identifier", 'email');
     }
 
+    /**
+     * The Blade layout the screens of a guard render in: the guard's own, else
+     * the general one, else null for Livewire's default.
+     */
+    public static function layout(?string $guard = null): ?string
+    {
+        $layout = $guard === null ? null : config("mfa.guards.{$guard}.layout");
+        $layout = is_string($layout) && $layout !== '' ? $layout : config('mfa.ui.layout');
+
+        return is_string($layout) && $layout !== '' ? $layout : null;
+    }
+
     public static function remember(string $guard): bool
     {
         return config("mfa.guards.{$guard}.remember") === true;
@@ -88,6 +100,96 @@ class MfaConfig
         $value = config("mfa.emergency.unavailable_until.{$dependency}");
 
         return is_string($value) && trim($value) !== '' ? trim($value) : null;
+    }
+
+    public static function firewallEnabled(): bool
+    {
+        return config('mfa.firewall.enabled') === true;
+    }
+
+    /**
+     * A fixed list of addresses or CIDR ranges: "allow", "deny" or "locations".
+     *
+     * @return list<string>
+     */
+    public static function firewallList(string $list): array
+    {
+        $ranges = config("mfa.firewall.{$list}");
+
+        return is_array($ranges) ? array_values(array_filter(array_map('strval', $ranges), fn (string $range) => $range !== '')) : [];
+    }
+
+    /**
+     * The ISO country codes that may sign in, in upper case: the list of the
+     * guard when it has one of its own, else the general list. Empty means no
+     * country filter.
+     *
+     * @return list<string>
+     */
+    public static function firewallCountries(?string $guard = null): array
+    {
+        $countries = $guard === null ? null : config("mfa.guards.{$guard}.countries");
+        $countries = is_array($countries) ? $countries : config('mfa.firewall.countries');
+
+        return is_array($countries) ? array_values(array_map(fn ($code) => strtoupper((string) $code), $countries)) : [];
+    }
+
+    /**
+     * Whether any guard, or the general list, filters on country.
+     */
+    public static function firewallFiltersCountries(): bool
+    {
+        if (self::firewallCountries() !== []) {
+            return true;
+        }
+
+        foreach (self::guards() as $guard) {
+            if (self::firewallCountries($guard) !== []) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function firewallAllowUnknownCountry(): bool
+    {
+        return config('mfa.firewall.allow_unknown_country') === true;
+    }
+
+    public static function firewallBlockAfterAttempts(): int
+    {
+        return max(1, (int) config('mfa.firewall.block_after_attempts'));
+    }
+
+    public static function firewallBlockMinutes(): int
+    {
+        return max(1, (int) config('mfa.firewall.block_minutes'));
+    }
+
+    public static function countryDriver(): string
+    {
+        return (string) config('mfa.firewall.country_driver');
+    }
+
+    public static function countryDatabase(): string
+    {
+        return (string) config('mfa.firewall.country_database');
+    }
+
+    public static function countryHeader(): string
+    {
+        return (string) config('mfa.firewall.country_header');
+    }
+
+    public static function pinMaxAttempts(): int
+    {
+        return max(1, (int) config('mfa.pin.max_attempts'));
+    }
+
+    public static function pinMinLength(): int
+    {
+        return max(4, (int) config('mfa.pin.min_length'));
     }
 
     public static function linkConfirm(): bool

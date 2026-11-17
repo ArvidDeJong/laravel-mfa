@@ -33,3 +33,10 @@ try {
 - During a provider outage use `php artisan mfa:emergency mail --until=18:00` and `php artisan mfa:link {guard} {email}`. Never switch the second step off by hand in code.
 - Put the `mfa.emergency` middleware on the routes behind the login when `emergency.allow_password_only` is used.
 - Text message driver: `MFA_SMS_DRIVER` is `log` (default, sends nothing), `messagebird` or `bird`.
+- Catch `Darvis\Mfa\Exceptions\BlockedException` next to `ThrottledException`: the firewall refused the address. Its message may be shown as is.
+- Firewall: `firewall.enabled`, fixed lists `allow`, `deny` and `locations` in the config, and rules in the database through the firewall screen or `php artisan mfa:allow-ip`. Do not write your own IP allow list, country filter or failed login block next to it.
+- Routes that should only work on site get the `mfa.location` middleware (optionally `mfa.location:staff`); routes behind a login get `mfa.firewall:staff` to end a session from an address that is not let in.
+- The `pin` channel only exists on a location that allows PIN login. Set a PIN with `Enrollment::setPin()`; never store a PIN yourself, and never with md5.
+- With Livewire and Flux installed, route the screens `Darvis\Mfa\Livewire\Login`, `Settings`, `FirewallRules` and `LoginAttempts` with `->defaults('guard', '<guard>')` instead of building your own. Set the layout per guard with `guards.<guard>.layout` and the general one with `ui.layout`. Define the `manageMfa` gate for the firewall and login log screens.
+- Country filter: `firewall.countries` for every guard, or `guards.<guard>.countries` for one. Filter the CMS guard, not the visitors of a site, unless asked otherwise.
+- When routes use `mfa.firewall`, also add `Darvis\Mfa\Http\Middleware\EnforceFirewall` to Livewire's persistent middleware; Livewire updates skip the middleware of the page otherwise. Put `mfa.firewall` after `auth` in a route group.

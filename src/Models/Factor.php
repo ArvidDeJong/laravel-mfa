@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string $authenticatable_id
  * @property string $type
  * @property string $secret
+ * @property int $failed_attempts
  * @property int|null $last_used_step
  * @property Carbon|null $confirmed_at
  * @property Carbon|null $last_used_at
@@ -24,6 +25,8 @@ use Illuminate\Support\Carbon;
 class Factor extends Model
 {
     public const AUTHENTICATOR = 'authenticator';
+
+    public const PIN = 'pin';
 
     public const RECOVERY = 'recovery';
 
@@ -61,6 +64,7 @@ class Factor extends Model
     {
         return [
             'confirmed_at' => 'datetime',
+            'failed_attempts' => 'integer',
             'last_used_at' => 'datetime',
             'last_used_step' => 'integer',
             'secret' => 'encrypted',

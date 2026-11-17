@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('authenticatable_id');
             $table->string('type');
             $table->text('secret');
+            $table->unsignedSmallInteger('failed_attempts')->default(0);
             $table->unsignedBigInteger('last_used_step')->nullable();
             $table->timestamp('confirmed_at')->nullable();
             $table->timestamp('last_used_at')->nullable();

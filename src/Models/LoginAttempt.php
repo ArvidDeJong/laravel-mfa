@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $method
  * @property string $result
  * @property string|null $ip
+ * @property string|null $country
  * @property string|null $user_agent
  * @property Carbon|null $created_at
  */

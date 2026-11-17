@@ -8,8 +8,10 @@ use Darvis\Mfa\Contracts\SendsChallenge;
 use Darvis\Mfa\Contracts\VerifiesSecret;
 use Darvis\Mfa\Events\ChallengeSent;
 use Darvis\Mfa\Events\LoginAttempted;
+use Darvis\Mfa\Exceptions\BlockedException;
 use Darvis\Mfa\Exceptions\ConfigurationException;
 use Darvis\Mfa\Exceptions\ThrottledException;
+use Darvis\Mfa\Firewall\Firewall;
 use Darvis\Mfa\Models\Challenge;
 use Darvis\Mfa\Models\LoginAttempt;
 use Darvis\Mfa\Support\ChannelRegistry;
@@ -49,6 +51,7 @@ class Mfa
         private readonly ChannelRegistry $registry,
         private readonly Emergency $emergency,
         private readonly AuthFactory $auth,
+        private readonly Firewall $firewall,
     ) {}
 
     /**
@@ -185,10 +188,12 @@ class Mfa
      * @param  string|null  $channel  A sending channel; the first available one when left out.
      *
      * @throws ThrottledException
+     * @throws BlockedException When the firewall refuses the address.
      * @throws ConfigurationException When the mail cannot carry a link, see linkUrl().
      */
     public function request(string $guard, string $identifier, ?string $channel = null): void
     {
+        $this->ensureAllowed($guard, $identifier, LoginAttempt::METHOD_REQUEST);
         $this->throttle('request', $guard, $identifier, LoginAttempt::METHOD_REQUEST);
 
         $user = $this->findUser($guard, $identifier);
@@ -233,9 +238,11 @@ class Mfa
      * @param  bool|null  $remember  Keep the user signed in; null follows the guard's "remember" setting.
      *
      * @throws ThrottledException
+     * @throws BlockedException When the firewall refuses the address.
      */
     public function loginWithCode(string $guard, string $identifier, string $code, ?bool $remember = null): ?Authenticatable
     {
+        $this->ensureAllowed($guard, $identifier, LoginAttempt::METHOD_CODE);
         $this->throttle('verify', $guard, $identifier, LoginAttempt::METHOD_CODE);
 
         $user = $this->findUser($guard, $identifier);
@@ -262,9 +269,11 @@ class Mfa
      * authenticator code, a recovery code or a password.
      *
      * @throws ThrottledException
+     * @throws BlockedException When the firewall refuses the address.
      */
     public function loginWithSecret(string $guard, string $identifier, string $channel, string $input, ?bool $remember = null): ?Authenticatable
     {
+        $this->ensureAllowed($guard, $identifier, LoginAttempt::METHOD_SECRET);
         $this->throttle('verify', $guard, $identifier, LoginAttempt::METHOD_SECRET);
 
         $user = $this->findUser($guard, $identifier);
@@ -295,6 +304,8 @@ class Mfa
     /**
      * Sign in with the token from a mailed link. A link that was used or has
      * expired is logged for its owner; a token that never existed is not.
+     *
+     * @throws BlockedException When the firewall refuses the address.
      */
     public function loginWithLink(string $token, ?bool $remember = null): ?Authenticatable
     {
@@ -310,6 +321,9 @@ class Mfa
         if ($user === null || Subject::type($user) !== $challenge->authenticatable_type) {
             return null;
         }
+
+        // After the owner is known, so a refusal is logged for them.
+        $this->ensureAllowed($guard, null, LoginAttempt::METHOD_LINK, $user);
 
         if ($challenge->hasExpired()) {
             return $this->fail($guard, LoginAttempt::EXPIRED, $challenge->channel, null, $user, LoginAttempt::METHOD_LINK);
@@ -345,6 +359,7 @@ class Mfa
                     'method' => $method,
                     'result' => $result,
                     'ip' => request()->ip(),
+                    'country' => $this->firewall->country(request()->ip()),
                     'user_agent' => Str::limit((string) request()->userAgent(), 250, ''),
                 ]);
             } catch (Throwable $exception) {
@@ -377,6 +392,8 @@ class Mfa
 
         $this->guard($guard)->login($user, $remember ?? MfaConfig::remember($guard));
 
+        $this->firewall->clearFailures(request()->ip());
+
         if (request()->hasSession()) {
             $session = request()->session();
             $session->regenerate();
@@ -405,7 +422,31 @@ class Mfa
     {
         $this->record($guard, $result, $channel, $identifier, $user, $method);
 
+        // Wrong guesses count towards a block of the address; asking for a
+        // mail and a stale link do not.
+        if (in_array($result, [LoginAttempt::INVALID, LoginAttempt::UNKNOWN_ACCOUNT], true) && $method !== LoginAttempt::METHOD_REQUEST) {
+            $this->firewall->registerFailure(request()->ip());
+        }
+
         return null;
+    }
+
+    /**
+     * Stop here when the firewall refuses the address of the request.
+     *
+     * @throws BlockedException
+     */
+    private function ensureAllowed(string $guard, ?string $identifier, string $method, ?Authenticatable $user = null): void
+    {
+        $verdict = $this->firewall->decide(request()->ip(), $guard);
+
+        if ($verdict->allowed) {
+            return;
+        }
+
+        $this->record($guard, (string) $verdict->reason, null, $identifier, $user, $method);
+
+        throw new BlockedException((string) $verdict->reason);
     }
 
     private function sender(string $guard, Authenticatable $user, ?string $channel): ?SendsChallenge

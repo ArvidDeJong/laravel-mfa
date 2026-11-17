@@ -11,8 +11,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `link.enabled` off: `routes/web.php` registers nothing and `Mfa::linkUrl()` needs `Mfa::linkUrlUsing()`, otherwise it throws `ConfigurationException`.
 - `Mfa::request()` reports and hides every failure to deliver (rule 1), but rethrows `ConfigurationException`: a setup that cannot work must not look like a quiet mail problem. Only rethrow that class, not every `LogicException`: Symfony's invalid address errors are `InvalidArgumentException`, and rethrowing those would reveal that an account exists.
 - Tables: `mfa_challenges`, `mfa_factors`, `mfa_login_attempts`
-- Commands: `mfa:check`, `mfa:emergency`, `mfa:link`, `mfa:prune`
-- Status: pre release. Not built yet: Livewire and Flux screens, the `passkey` channel (on `laravel/passkeys`), password plus second step as one flow, the docs site, the install command.
+- Tables also: `mfa_firewall_rules`
+- Commands: `mfa:check`, `mfa:emergency`, `mfa:link`, `mfa:prune`, `mfa:allow-ip`, `mfa:geoip-update`
+- Status: pre release. Not built yet: the `passkey` channel (on `laravel/passkeys`), password plus second step as one flow, the docs site, the install command.
 
 ## Architecture
 
@@ -21,6 +22,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `Channel::dependency()` names the outside service a channel cannot work without (`mail`, `sms`) or null. Everything about resilience and emergencies is derived from it; never hard code a channel name for that.
 - [Emergency](src/Support/Emergency.php) answers "is this dependency declared down, and until when". Two sources: config and the cache (set by `mfa:emergency`). Both go through the same parser, which fails closed.
 - [Enrollment](src/Enrollment.php) sets factors up. An unconfirmed factor never counts and never replaces a confirmed one.
+
+## Firewall, locations and screens
+
+- [Firewall](src/Firewall/Firewall.php) decides in a fixed order: deny list, automatic block, allow list and locations, country filter. `Mfa` asks it at the start of `request()` and every `loginWith…()` and throws `BlockedException`; a refusal says nothing about an account, so it may be shown. Wrong guesses (`invalid`, `unknown_account`, never a request) count towards an automatic block, which is a `FirewallRule` with `automatic` set.
+- A location (config `firewall.locations`, or an allow rule with `is_location`) is what `mfa.location` and the `pin` channel look at. `isLocation()` and `pinAllowed()` work with the firewall switched off.
+- Country sources are drivers of [CountryManager](src/Firewall/CountryManager.php) and never throw. An unknown country is refused unless `firewall.allow_unknown_country` is on.
+- The Livewire screens in `src/Livewire` are only registered when Livewire is bound. They take their guard from the route default `guard`, keep it `#[Locked]`, and render through `RendersInLayout` (guard layout, else `ui.layout`, else Livewire's default). In Flux components use `:key`, not `wire:key`: Livewire 4 compiles `wire:key` on a Blade component into broken PHP. Clear the error bag at the start of every action, `addError()` messages otherwise survive the next call.
+- The login screen offers every channel of the guard to every visitor; only `pin` depends on the address of the request.
 
 ## Rules that must not break
 
