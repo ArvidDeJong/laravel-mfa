@@ -183,6 +183,27 @@ it('adds and removes firewall rules on screen', function () {
     expect(FirewallRule::query()->count())->toBe(0);
 });
 
+it('lets the "liftMfaBlocks" gate lift a block without managing the rules', function () {
+    Gate::define('manageMfa', fn ($user = null) => false);
+    Gate::define('liftMfaBlocks', fn ($user = null) => true);
+
+    $exception = FirewallRule::query()->create(['action' => FirewallRule::ALLOW, 'range' => '203.0.113.5', 'note' => 'Timo, hotel Istanbul']);
+    $block = FirewallRule::query()->create(['action' => FirewallRule::DENY, 'automatic' => true, 'range' => '203.0.113.9', 'expires_at' => now()->addMinutes(15)]);
+
+    $screen = Livewire::test(FirewallRules::class)
+        ->assertSee('203.0.113.9')
+        ->assertDontSee('Timo, hotel Istanbul');
+
+    $screen->set('range', '203.0.113.7')->call('add')->assertForbidden();
+    Livewire::test(FirewallRules::class)->call('remove', $exception->id)->assertForbidden();
+    Livewire::test(FirewallRules::class)->call('remove', $block->id)->assertOk();
+
+    expect(FirewallRule::query()->count())->toBe(2)
+        ->and($block->refresh()->lifted_at)->not->toBeNull();
+
+    $this->get('/admin/attempts')->assertForbidden();
+});
+
 it('lists and filters the login log', function () {
     Gate::define('manageMfa', fn ($user = null) => true);
 

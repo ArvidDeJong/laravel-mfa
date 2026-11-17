@@ -4,6 +4,7 @@ namespace Darvis\Mfa\Support;
 
 use Darvis\Mfa\Contracts\MfaUser;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * Reads what the package needs from any authenticatable, with or without the
@@ -38,6 +39,23 @@ class Subject
         $flag = data_get($user, 'is_active');
 
         return $flag === null || (bool) $flag;
+    }
+
+    /**
+     * Who is acting right now, for "created by" and "lifted by": the address
+     * (or id) of whoever is signed in on one of the package's guards.
+     */
+    public static function actor(): ?string
+    {
+        foreach (MfaConfig::guards() as $guard) {
+            $user = Auth::guard($guard)->user();
+
+            if ($user !== null) {
+                return self::email($user) ?? self::id($user);
+            }
+        }
+
+        return null;
     }
 
     public static function type(Authenticatable $user): string

@@ -34,7 +34,12 @@ class Firewall
         return $this->decide($ip, $guard)->allowed;
     }
 
-    public function decide(?string $ip, ?string $guard = null): Verdict
+    /**
+     * With $ignoreBlock the block for failed logins is left out: that block
+     * stops new logins, it does not end the session of somebody who is
+     * already signed in from the same address.
+     */
+    public function decide(?string $ip, ?string $guard = null, bool $ignoreBlock = false): Verdict
     {
         if (! $this->enabled()) {
             return Verdict::allow();
@@ -48,8 +53,10 @@ class Firewall
             return Verdict::refuse(Verdict::DENIED);
         }
 
-        if (! $this->neverBlocked($ip, $guard) && $this->matching($ip, $guard, FirewallRule::DENY, automatic: true)->isNotEmpty()) {
-            return Verdict::refuse(Verdict::TOO_MANY_FAILURES);
+        $block = $ignoreBlock || $this->neverBlocked($ip, $guard) ? null : $this->matching($ip, $guard, FirewallRule::DENY, automatic: true)->first();
+
+        if ($block instanceof FirewallRule) {
+            return Verdict::refuse(Verdict::TOO_MANY_FAILURES, $block->expires_at);
         }
 
         if ($this->inList('allow', $ip) || $this->inList('locations', $ip) || $this->matching($ip, $guard, FirewallRule::ALLOW)->isNotEmpty()) {
@@ -125,6 +132,18 @@ class Firewall
             'note' => 'Too many failed logins',
             'range' => $ip,
         ]);
+
+        $this->rules = [];
+    }
+
+    /**
+     * Lift a block (or end any rule) now, remembering who did. The failures
+     * that led to it were already cleared, so the next typo does not block
+     * the address again.
+     */
+    public function lift(FirewallRule $rule, ?string $by = null): void
+    {
+        $rule->lift($by);
 
         $this->rules = [];
     }

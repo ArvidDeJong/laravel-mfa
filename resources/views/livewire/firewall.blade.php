@@ -7,6 +7,7 @@
         <flux:text>{{ __('mfa::mfa.firewall_intro', ['ip' => $yourIp]) }}</flux:text>
     </div>
 
+    @if ($canManage)
     <flux:card>
         <form wire:submit="add" class="flex flex-col gap-4">
             <flux:heading>{{ __('mfa::mfa.firewall_add') }}</flux:heading>
@@ -44,6 +45,7 @@
             </div>
         </form>
     </flux:card>
+    @endif
 
     <flux:table>
         <flux:table.columns>

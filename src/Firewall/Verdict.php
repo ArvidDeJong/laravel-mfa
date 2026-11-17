@@ -2,6 +2,8 @@
 
 namespace Darvis\Mfa\Firewall;
 
+use Carbon\CarbonInterface;
+
 /**
  * What the firewall decided about one address, and why.
  */
@@ -16,6 +18,7 @@ class Verdict
     private function __construct(
         public readonly bool $allowed,
         public readonly ?string $reason = null,
+        public readonly ?CarbonInterface $until = null,
     ) {}
 
     public static function allow(): self
@@ -23,8 +26,11 @@ class Verdict
         return new self(true);
     }
 
-    public static function refuse(string $reason): self
+    /**
+     * @param  CarbonInterface|null  $until  When the refusal ends by itself, for a block after failed logins.
+     */
+    public static function refuse(string $reason, ?CarbonInterface $until = null): self
     {
-        return new self(false, $reason);
+        return new self(false, $reason, $until);
     }
 }

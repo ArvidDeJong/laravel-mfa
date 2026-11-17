@@ -11,7 +11,8 @@ use Illuminate\Support\Carbon;
  * moment in time. Rules that never change can live in config/mfa.php instead.
  *
  * A rule made by the firewall itself after too many failed logins has
- * "automatic" set; deleting it lifts the block.
+ * "automatic" set. Lifting it ends the block and keeps the row, with who
+ * lifted it and when, until it is pruned.
  *
  * @property int $id
  * @property string $action
@@ -24,6 +25,8 @@ use Illuminate\Support\Carbon;
  * @property bool $automatic
  * @property string|null $created_by
  * @property Carbon|null $expires_at
+ * @property Carbon|null $lifted_at
+ * @property string|null $lifted_by
  */
 class FirewallRule extends Model
 {
@@ -55,6 +58,14 @@ class FirewallRule extends Model
     }
 
     /**
+     * End the rule now and remember who did.
+     */
+    public function lift(?string $by = null): void
+    {
+        $this->forceFill(['lifted_at' => now(), 'lifted_by' => $by])->save();
+    }
+
+    /**
      * Rules that hold right now, for a guard or for every guard.
      *
      * @param  Builder<FirewallRule>  $query
@@ -63,6 +74,7 @@ class FirewallRule extends Model
     public function scopeActive(Builder $query, ?string $guard = null): Builder
     {
         return $query
+            ->whereNull('lifted_at')
             ->where(fn (Builder $query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->when($guard !== null, fn (Builder $query) => $query->where(
                 fn (Builder $query) => $query->whereNull('guard')->orWhere('guard', $guard)
@@ -79,6 +91,7 @@ class FirewallRule extends Model
             'automatic' => 'boolean',
             'expires_at' => 'datetime',
             'is_location' => 'boolean',
+            'lifted_at' => 'datetime',
             'never_block' => 'boolean',
         ];
     }

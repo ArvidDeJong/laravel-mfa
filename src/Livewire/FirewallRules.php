@@ -7,6 +7,7 @@ use Darvis\Mfa\Livewire\Concerns\AuthorizesManagement;
 use Darvis\Mfa\Livewire\Concerns\RendersInLayout;
 use Darvis\Mfa\Models\FirewallRule;
 use Darvis\Mfa\Support\MfaConfig;
+use Darvis\Mfa\Support\Subject;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Livewire\Component;
@@ -38,7 +39,7 @@ class FirewallRules extends Component
 
     public function mount(): void
     {
-        $this->authorizeManagement();
+        $this->authorizeLifting();
     }
 
     public function add(Firewall $firewall): void
@@ -74,6 +75,7 @@ class FirewallRules extends Component
         FirewallRule::query()->create([
             'action' => $allow ? FirewallRule::ALLOW : FirewallRule::DENY,
             'allows_pin' => $allow && $this->allowsPin,
+            'created_by' => Subject::actor(),
             'expires_at' => $expiresAt,
             'guard' => MfaConfig::hasGuard($this->ruleGuard) ? $this->ruleGuard : null,
             'is_location' => $allow && ($this->isLocation || $this->allowsPin),
@@ -88,30 +90,47 @@ class FirewallRules extends Component
     }
 
     /**
-     * Remove a rule; for an automatic block this lifts the block.
+     * Remove a rule, or lift an automatic block.
      */
     public function remove(int $id, Firewall $firewall): void
     {
         $this->resetErrorBag();
 
+        $rule = FirewallRule::query()->find($id);
+
+        // A block is lifted, so the row keeps who did; a rule somebody added
+        // by hand is simply removed, and only by who manages the firewall.
+        if ($rule instanceof FirewallRule && $rule->automatic) {
+            $this->authorizeLifting();
+
+            $firewall->lift($rule, Subject::actor());
+
+            return;
+        }
+
         $this->authorizeManagement();
 
-        FirewallRule::query()->whereKey($id)->delete();
-
+        $rule?->delete();
         $firewall->refresh();
     }
 
     public function render(): View
     {
+        $this->authorizeLifting();
+
+        $canManage = $this->canManage();
+
         return $this->screen('mfa::livewire.firewall', [
+            'canManage' => $canManage,
             'enabled' => MfaConfig::firewallEnabled(),
-            'fixed' => [
+            'fixed' => $canManage ? [
                 'allow' => MfaConfig::firewallList('allow'),
                 'deny' => MfaConfig::firewallList('deny'),
                 'locations' => MfaConfig::firewallList('locations'),
-            ],
+            ] : [],
             'guards' => MfaConfig::guards(),
-            'rules' => FirewallRule::query()->active()->orderByDesc('automatic')->latest('id')->limit(200)->get(),
+            // Who may only lift blocks sees the blocks and nothing else.
+            'rules' => FirewallRule::query()->active()->when(! $canManage, fn ($query) => $query->where('automatic', true))->orderByDesc('automatic')->latest('id')->limit(200)->get(),
             'yourIp' => request()->ip(),
         ], __('mfa::mfa.firewall_title'));
     }

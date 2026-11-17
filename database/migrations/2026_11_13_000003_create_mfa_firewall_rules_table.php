@@ -24,6 +24,8 @@ return new class extends Migration
             $table->boolean('automatic')->default(false);
             $table->string('created_by')->nullable();
             $table->timestamp('expires_at')->nullable();
+            $table->timestamp('lifted_at')->nullable();
+            $table->string('lifted_by')->nullable();
             $table->timestamps();
 
             $table->index(['action', 'expires_at']);

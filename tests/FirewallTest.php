@@ -329,6 +329,26 @@ it('stores a pin hashed', function () {
     expect(Factor::owned($staff, Factor::PIN)->sole()->secret)->not->toBe('4071');
 });
 
+it('lifts a block from the command line and leaves the deny list alone', function () {
+    firewall(['block_after_attempts' => 1]);
+    app(Firewall::class)->registerFailure('203.0.113.9');
+    app(Firewall::class)->registerFailure('203.0.113.10');
+    rule(['action' => FirewallRule::DENY, 'range' => '203.0.113.9']);
+
+    $this->artisan('mfa:unblock-ip', ['ip' => '203.0.113.9'])->assertSuccessful();
+
+    $lifted = FirewallRule::query()->whereNotNull('lifted_at')->sole();
+
+    expect($lifted->automatic)->toBeTrue()
+        ->and($lifted->range)->toBe('203.0.113.9')
+        ->and($lifted->lifted_by)->toBe('command line')
+        ->and(app(Firewall::class)->decide('203.0.113.10')->reason)->toBe(Verdict::TOO_MANY_FAILURES)
+        ->and(app(Firewall::class)->decide('203.0.113.9')->reason)->toBe(Verdict::DENIED);
+
+    $this->artisan('mfa:unblock-ip', ['ip' => '203.0.113.9'])->assertSuccessful();
+    $this->artisan('mfa:unblock-ip', ['ip' => 'not an address'])->assertFailed();
+});
+
 it('lets an address in from the command line', function () {
     $this->artisan('mfa:allow-ip', ['ip' => '203.0.113.0/24', '--until' => now()->addDays(2)->toDateString(), '--note' => 'Timo, hotel Istanbul', '--pin' => true])->assertSuccessful();
 
@@ -344,12 +364,44 @@ it('lets an address in from the command line', function () {
     $this->artisan('mfa:allow-ip', ['ip' => '203.0.113.1/40'])->assertFailed();
 });
 
-it('prunes firewall rules that have run out and keeps the rest', function () {
+it('keeps an ended firewall rule as long as the login log, then prunes it', function () {
+    config(['mfa.log.retention_days' => 90]);
+
     rule(['range' => '203.0.113.1', 'expires_at' => now()->addDay()]);
     rule(['range' => '203.0.113.2']);
+    app(Firewall::class)->lift(rule(['range' => '203.0.113.3']), 'arvid@example.com');
 
     $this->travel(2)->days();
     $this->artisan('mfa:prune')->assertSuccessful();
 
+    expect(FirewallRule::query()->count())->toBe(3);
+
+    $this->travel(90)->days();
+    $this->artisan('mfa:prune')->assertSuccessful();
+
     expect(FirewallRule::query()->pluck('range')->all())->toBe(['203.0.113.2']);
+});
+
+it('keeps a signed in session when its address is blocked for failed logins', function () {
+    Route::get('/cms', fn () => 'cms')->middleware(['web', 'mfa.firewall:staff']);
+
+    firewall(['block_after_attempts' => 1]);
+    app(Firewall::class)->registerFailure('127.0.0.1');
+
+    expect(app(Firewall::class)->decide('127.0.0.1', 'staff')->reason)->toBe(Verdict::TOO_MANY_FAILURES);
+
+    $this->actingAs($this->staff(), 'staff')->get('/cms')->assertOk();
+});
+
+it('still applies the deny list and the country filter when the block is ignored', function () {
+    firewall(['block_after_attempts' => 1]);
+    countries(['203.0.113.9' => 'TR']);
+    config(['mfa.guards.staff.countries' => ['NL']]);
+    app(Firewall::class)->registerFailure('203.0.113.9');
+
+    expect(app(Firewall::class)->decide('203.0.113.9', 'staff', ignoreBlock: true)->reason)->toBe(Verdict::COUNTRY);
+
+    config(['mfa.firewall.deny' => ['203.0.113.9']]);
+
+    expect(app(Firewall::class)->decide('203.0.113.9', 'staff', ignoreBlock: true)->reason)->toBe(Verdict::DENIED);
 });

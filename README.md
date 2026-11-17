@@ -63,6 +63,19 @@ $user = Mfa::loginWithCode('staff', $email, $code);
 $user = Mfa::loginWithSecret('staff', $email, 'authenticator', $code);
 ```
 
+A login in two steps, such as a password followed by a mailed code, checks the first step without signing in:
+
+```php
+if (Mfa::checkSecret('staff', $email, 'password', $password) !== null) {
+    Mfa::request('staff', $email, 'mail');
+}
+
+// next screen
+$user = Mfa::loginWithCode('staff', $email, $code);
+```
+
+To switch a channel off for one account, implement `Darvis\Mfa\Contracts\RestrictsChannels` on the model. Nothing is sent and every code fails for that account, with the same screen as for an unknown address.
+
 Each login method returns the user on success and `null` otherwise, with one answer for every way it can fail. `Darvis\Mfa\Exceptions\ThrottledException` is thrown after too many tries.
 
 The link in the mail is handled by the package (`/mfa/link/{token}`) and lands on the guard's `home`. To land it on a route of your own instead, call `Mfa::linkUrlUsing(fn (string $token) => route('login.link', $token))`, call `Mfa::loginWithLink($token)` from that route and set `'link' => ['enabled' => false]`, so the package route is not registered at all.
@@ -112,6 +125,14 @@ The firewall and login log screens ask the `manageMfa` gate. Without that gate t
 Gate::define('manageMfa', fn ($user = null) => Auth::guard('staff')->check());
 ```
 
+A second, optional gate lets a wider group lift a block that followed failed logins, without managing the rules. Whoever passes only this gate sees the firewall screen with the blocks and nothing else:
+
+```php
+Gate::define('liftMfaBlocks', fn ($user = null) => Auth::guard('staff')->check());
+```
+
+Keeping a screen of your own, because the application has its own login log or its own rights? Write rules with `Darvis\Mfa\Models\FirewallRule`, call `Firewall::refresh()` after writing one directly, and lift a block with `Firewall::lift($rule, $who)` so the row keeps who did.
+
 The views can be published with `php artisan vendor:publish --tag=mfa-views`.
 
 ## Firewall, locations and PIN
@@ -133,6 +154,7 @@ Rules that come and go live in the database and can end on a date. Add them on t
 ```bash
 php artisan mfa:allow-ip 203.0.113.9 --until=2026-11-25 --note="Timo, hotel Istanbul"
 php artisan mfa:allow-ip 198.51.100.7 --location --pin --never-block --note="Warehouse"
+php artisan mfa:unblock-ip 203.0.113.9   # locked yourself out with wrong passwords
 ```
 
 A location is a place where you are on site. Routes behind the `mfa.location` middleware only open there, and the `pin` channel only exists there:
@@ -154,6 +176,10 @@ Livewire::addPersistentMiddleware([\Darvis\Mfa\Http\Middleware\EnforceFirewall::
 ```
 
 Put `mfa.firewall` after `auth` in a group behind a login, so a guest still reaches the login screen instead of a 403.
+
+The block for failed logins stops new logins only. Behind a login the middleware leaves it out, so one colleague with a wrong password does not sign out the whole office; the deny list, the allow list and the country filter still apply. Ask the same yourself with `Firewall::decide($ip, $guard, ignoreBlock: true)`.
+
+A rule that ended, such as a lifted block, stays in the table for `log.retention_days` and is then removed by `mfa:prune`.
 
 The country filter can be set per guard. This keeps the CMS to the Netherlands and leaves the visitors of the site alone:
 

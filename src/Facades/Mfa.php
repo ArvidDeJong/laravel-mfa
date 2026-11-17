@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static void request(string $guard, string $identifier, ?string $channel = null)
  * @method static \Illuminate\Contracts\Auth\Authenticatable|null loginWithCode(string $guard, string $identifier, string $code, ?bool $remember = null)
  * @method static \Illuminate\Contracts\Auth\Authenticatable|null loginWithSecret(string $guard, string $identifier, string $channel, string $input, ?bool $remember = null)
+ * @method static \Illuminate\Contracts\Auth\Authenticatable|null checkSecret(string $guard, string $identifier, string $channel, string $input)
  * @method static \Illuminate\Contracts\Auth\Authenticatable|null loginWithLink(string $token, ?bool $remember = null)
  * @method static bool linkIsUsable(string $token)
  * @method static void sendMailUsing(?\Closure $callback)

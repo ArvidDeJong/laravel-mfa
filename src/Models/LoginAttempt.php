@@ -28,7 +28,11 @@ class LoginAttempt extends Model
 {
     use MassPrunable;
 
+    public const NOT_ALLOWED = 'not_allowed';
+
     public const SUCCEEDED = 'succeeded';
+
+    public const VERIFIED = 'verified';
 
     public const EMERGENCY = 'emergency';
 

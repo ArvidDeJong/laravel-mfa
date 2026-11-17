@@ -14,6 +14,7 @@ use Darvis\Mfa\Console\EmergencyCommand;
 use Darvis\Mfa\Console\GeoipUpdateCommand;
 use Darvis\Mfa\Console\LinkCommand;
 use Darvis\Mfa\Console\PruneCommand;
+use Darvis\Mfa\Console\UnblockIpCommand;
 use Darvis\Mfa\Firewall\CountryManager;
 use Darvis\Mfa\Firewall\Firewall;
 use Darvis\Mfa\Http\Middleware\EndEmergencySession;
@@ -111,6 +112,7 @@ class MfaServiceProvider extends ServiceProvider
                 GeoipUpdateCommand::class,
                 LinkCommand::class,
                 PruneCommand::class,
+                UnblockIpCommand::class,
             ]);
 
             $this->publishes([__DIR__.'/../config/mfa.php' => config_path('mfa.php')], 'mfa-config');

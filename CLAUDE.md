@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `Mfa::request()` reports and hides every failure to deliver (rule 1), but rethrows `ConfigurationException`: a setup that cannot work must not look like a quiet mail problem. Only rethrow that class, not every `LogicException`: Symfony's invalid address errors are `InvalidArgumentException`, and rethrowing those would reveal that an account exists.
 - Tables: `mfa_challenges`, `mfa_factors`, `mfa_login_attempts`
 - Tables also: `mfa_firewall_rules`
-- Commands: `mfa:check`, `mfa:emergency`, `mfa:link`, `mfa:prune`, `mfa:allow-ip`, `mfa:geoip-update`
+- Commands: `mfa:check`, `mfa:emergency`, `mfa:link`, `mfa:prune`, `mfa:allow-ip`, `mfa:unblock-ip`, `mfa:geoip-update`
 - Status: pre release. Not built yet: the `passkey` channel (on `laravel/passkeys`), password plus second step as one flow, the docs site, the install command.
 
 ## Architecture
@@ -30,6 +30,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Country sources are drivers of [CountryManager](src/Firewall/CountryManager.php) and never throw. An unknown country is refused unless `firewall.allow_unknown_country` is on.
 - The Livewire screens in `src/Livewire` are only registered when Livewire is bound. They take their guard from the route default `guard`, keep it `#[Locked]`, and render through `RendersInLayout` (guard layout, else `ui.layout`, else Livewire's default). In Flux components use `:key`, not `wire:key`: Livewire 4 compiles `wire:key` on a Blade component into broken PHP. Clear the error bag at the start of every action, `addError()` messages otherwise survive the next call.
 - The login screen offers every channel of the guard to every visitor; only `pin` depends on the address of the request.
+
+- `checkSecret()` shares `verifySecret()` with `loginWithSecret()`: same throttle, firewall, log and failure count, but no login. The application decides what the second step is; the package does not yet enforce "password and a second factor" by itself.
+- `RestrictsChannels` is asked in `available()` and again when a code or link is used, so a message sent before the restriction stops working too. A restricted channel must look like an unknown address from the outside.
 
 ## Rules that must not break
 
