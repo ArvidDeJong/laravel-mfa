@@ -32,12 +32,22 @@
         "pragmarx/google2fa": "^8.0|^9.0"
     },
     "require-dev": {
+        "bacon/bacon-qr-code": "^2.0|^3.0",
+        "geoip2/geoip2": "^3.0",
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.0",
+        "livewire/flux": "^2.11",
+        "livewire/livewire": "^3.7.4|^4.0",
         "orchestra/testbench": "^9.0|^10.0|^11.0",
         "pestphp/pest": "^3.0|^4.0",
         "pestphp/pest-plugin-laravel": "^3.0|^4.0",
         "phpunit/phpunit": "^11.0|^12.0|^13.0"
+    },
+    "suggest": {
+        "bacon/bacon-qr-code": "Draws the QR code on the settings screen (^2.0 or ^3.0); Laravel Fortify already brings it.",
+        "geoip2/geoip2": "Required for the \"database\" country driver of the firewall (^3.0).",
+        "livewire/flux": "Required for the login, settings, firewall and login log screens (^2.11, the free edition is enough).",
+        "livewire/livewire": "Required for the login, settings, firewall and login log screens (^3.7.4 or ^4.0)."
     },
     "autoload": {
         "psr-4": {

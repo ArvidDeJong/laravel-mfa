@@ -47,15 +47,72 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Firewall
+    |--------------------------------------------------------------------------
+    |
+    | Decides from where somebody may try to sign in. Off by default. Every
+    | request is judged in this order:
+    |
+    |   1. on the deny list                         refused
+    |   2. blocked after too many failed logins     refused
+    |   3. on the allow list, or a location         let in, from any country
+    |   4. from a country that is not allowed       refused
+    |   5. anything else                            let in
+    |
+    | allow, deny, locations: IP addresses or CIDR ranges that never change.
+    | Addresses that come and go (a colleague abroad, an extra office) are
+    | rules in the database, see "php artisan mfa:allow-ip".
+    |
+    | locations: the places where you are on site, such as the office. They
+    | are let in like "allow", they open routes behind the "mfa.location"
+    | middleware and they are where the "pin" channel works.
+    |
+    | Addresses in allow and locations are never blocked for failed logins,
+    | so one typo cannot lock out a whole office.
+    |
+    | countries: ISO codes that may sign in, such as ['NL', 'BE']. Empty means
+    | no country filter. A guard can have a list of its own (guards.*.countries),
+    | which is how a CMS guard is kept to one country while the visitors of the
+    | site sign in from anywhere. A country that cannot be told is refused unless
+    | "allow_unknown_country" is on: the filter fails closed.
+    |
+    | country_driver: database (a local file, needs geoip2/geoip2 and
+    | "php artisan mfa:geoip-update"), header (a proxy such as Cloudflare
+    | names the country) or none.
+    |
+    */
+
+    'firewall' => [
+        'allow' => [],
+        'allow_unknown_country' => false,
+        'block_after_attempts' => 5,
+        'block_minutes' => 15,
+        'countries' => [],
+        'country_database' => storage_path('app/mfa/country.mmdb'),
+        'country_driver' => env('MFA_COUNTRY_DRIVER', 'database'),
+        'country_header' => 'CF-IPCountry',
+        'deny' => [],
+        'enabled' => (bool) env('MFA_FIREWALL', false),
+        'locations' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Guards
     |--------------------------------------------------------------------------
     |
     | Every guard listed here gets its own set of login channels. Leave out a
     | guard that Laravel Fortify already serves.
     |
-    | channels:   mail, sms, authenticator, recovery, password
+    | channels:   mail, sms, authenticator, recovery, password, pin
+    | countries:  the country filter of the firewall for this guard alone, such
+    |             as ['NL'] for a CMS; [] switches the filter off for this
+    |             guard, null follows firewall.countries
     | home:       where a mailed link lands after a successful login
     | identifier: the column a visitor types to say who they are
+    | layout:     the Blade layout of this guard's login and settings screens
+    |             (the Livewire components), such as 'layouts::cms-auth';
+    |             null falls back to ui.layout
     | remember:   keep the user signed in with a remember cookie
     |
     */
@@ -63,8 +120,10 @@ return [
     'guards' => [
         'web' => [
             'channels' => ['mail', 'authenticator', 'recovery'],
+            'countries' => null,
             'home' => '/',
             'identifier' => 'email',
+            'layout' => null,
             'remember' => false,
         ],
     ],
@@ -100,6 +159,22 @@ return [
     'log' => [
         'enabled' => true,
         'retention_days' => 90,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | PIN
+    |--------------------------------------------------------------------------
+    |
+    | The "pin" channel only works on a location (see the firewall): a short
+    | code is fine at the office and nowhere else. After "max_attempts" wrong
+    | tries the PIN is locked until the user sets a new one.
+    |
+    */
+
+    'pin' => [
+        'max_attempts' => 4,
+        'min_length' => 4,
     ],
 
     /*
@@ -151,6 +226,25 @@ return [
     'totp' => [
         'issuer' => env('APP_NAME', 'Laravel'),
         'window' => 1,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Screens
+    |--------------------------------------------------------------------------
+    |
+    | The Livewire components (login, settings, firewall, login log) are only
+    | registered when Livewire is installed. "layout" is the Blade layout they
+    | render in when a guard names none; null leaves it to Livewire's own
+    | default layout.
+    |
+    | The firewall and login log screens ask the "manageMfa" gate. Without
+    | that gate they only open in the local environment.
+    |
+    */
+
+    'ui' => [
+        'layout' => null,
     ],
 
 ];

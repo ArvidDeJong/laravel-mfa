@@ -22,6 +22,7 @@ return new class extends Migration
             $table->string('method')->nullable();
             $table->string('result');
             $table->string('ip', 45)->nullable();
+            $table->string('country', 2)->nullable();
             $table->string('user_agent')->nullable();
             $table->timestamp('created_at')->nullable()->index();
 

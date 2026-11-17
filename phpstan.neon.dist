@@ -8,6 +8,16 @@ parameters:
         -
             identifier: trait.unused
             path: src/Concerns/HasMfa.php
+        # Larastan cannot resolve views registered under a package namespace,
+        # and title() and layout() are macros Livewire adds to the view.
+        -
+            identifier: argument.type
+            message: '#view-string\|null, string given#'
+            path: src/Livewire/Concerns/RendersInLayout.php
+        -
+            identifier: method.notFound
+            message: '#Illuminate\\View\\View::(title|layout)\(\)#'
+            path: src/Livewire/Concerns/RendersInLayout.php
     paths:
         - src
         - database

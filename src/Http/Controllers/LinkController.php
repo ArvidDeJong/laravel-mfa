@@ -2,6 +2,7 @@
 
 namespace Darvis\Mfa\Http\Controllers;
 
+use Darvis\Mfa\Exceptions\BlockedException;
 use Darvis\Mfa\Mfa;
 use Darvis\Mfa\Support\MfaConfig;
 use Illuminate\Http\RedirectResponse;
@@ -36,7 +37,11 @@ class LinkController extends Controller
 
     private function signIn(Mfa $mfa, string $token): Response|RedirectResponse
     {
-        $user = $mfa->loginWithLink($token);
+        try {
+            $user = $mfa->loginWithLink($token);
+        } catch (BlockedException $exception) {
+            abort(403, $exception->getMessage());
+        }
 
         if ($user === null) {
             return response()->view('mfa::link', ['token' => $token, 'usable' => false], 410);

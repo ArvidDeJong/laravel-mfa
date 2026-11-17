@@ -1,0 +1,6 @@
+Script started on Tue Nov 17 09:50:04 2026
+Command: analyse --memory-limit=1G handling the analyse event returned with error code 1
+Script: analyse: No such file or directory
+
+Command exit status: 1
+Script done on Tue Nov 17 09:50:04 2026

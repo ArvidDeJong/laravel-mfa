@@ -10,6 +10,7 @@ use Darvis\Mfa\Models\Factor;
 use Darvis\Mfa\Support\MfaConfig;
 use Darvis\Mfa\Support\Subject;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use PragmaRX\Google2FA\Google2FA;
@@ -150,7 +151,49 @@ class Enrollment
     }
 
     /**
-     * Remove a factor: Factor::AUTHENTICATOR, Factor::SMS or Factor::RECOVERY.
+     * Set or replace the PIN, which only works on a location. Also unlocks a
+     * PIN that was locked after too many wrong tries.
+     *
+     * @throws InvalidArgumentException When the PIN is too short, not digits or easy to guess.
+     */
+    public function setPin(Authenticatable $user, string $pin): void
+    {
+        if (preg_match('/^\d{'.MfaConfig::pinMinLength().',12}$/', $pin) !== 1) {
+            throw new InvalidArgumentException('A PIN is at least '.MfaConfig::pinMinLength().' digits.');
+        }
+
+        if ($this->isObvious($pin)) {
+            throw new InvalidArgumentException('This PIN is too easy to guess.');
+        }
+
+        Factor::owned($user, Factor::PIN)->delete();
+
+        Factor::query()->create([
+            'authenticatable_type' => Subject::type($user),
+            'authenticatable_id' => Subject::id($user),
+            'type' => Factor::PIN,
+            'secret' => Hash::make($pin),
+            'confirmed_at' => now(),
+        ]);
+    }
+
+    /**
+     * One digit repeated, or a run up or down such as 1234 or 9876.
+     */
+    private function isObvious(string $pin): bool
+    {
+        $digits = array_map('intval', str_split($pin));
+        $steps = [];
+
+        for ($i = 1; $i < count($digits); $i++) {
+            $steps[] = $digits[$i] - $digits[$i - 1];
+        }
+
+        return count(array_unique($steps)) === 1 && in_array($steps[0], [-1, 0, 1], true);
+    }
+
+    /**
+     * Remove a factor: Factor::AUTHENTICATOR, Factor::SMS, Factor::RECOVERY or Factor::PIN.
      */
     public function remove(Authenticatable $user, string $type): void
     {

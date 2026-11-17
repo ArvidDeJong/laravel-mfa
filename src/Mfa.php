@@ -4,12 +4,15 @@ namespace Darvis\Mfa;
 
 use Closure;
 use Darvis\Mfa\Contracts\Channel;
+use Darvis\Mfa\Contracts\RestrictsChannels;
 use Darvis\Mfa\Contracts\SendsChallenge;
 use Darvis\Mfa\Contracts\VerifiesSecret;
 use Darvis\Mfa\Events\ChallengeSent;
 use Darvis\Mfa\Events\LoginAttempted;
+use Darvis\Mfa\Exceptions\BlockedException;
 use Darvis\Mfa\Exceptions\ConfigurationException;
 use Darvis\Mfa\Exceptions\ThrottledException;
+use Darvis\Mfa\Firewall\Firewall;
 use Darvis\Mfa\Models\Challenge;
 use Darvis\Mfa\Models\LoginAttempt;
 use Darvis\Mfa\Support\ChannelRegistry;
@@ -49,6 +52,7 @@ class Mfa
         private readonly ChannelRegistry $registry,
         private readonly Emergency $emergency,
         private readonly AuthFactory $auth,
+        private readonly Firewall $firewall,
     ) {}
 
     /**
@@ -126,12 +130,22 @@ class Mfa
         $names = [];
 
         foreach ($this->channels($guard) as $channel) {
-            if (! $this->emergency->isUnavailable($channel->dependency()) && $channel->enrolled($user)) {
+            if (! $this->emergency->isUnavailable($channel->dependency())
+                && $this->allowedFor($guard, $user, $channel->name())
+                && $channel->enrolled($user)) {
                 $names[] = $channel->name();
             }
         }
 
         return $names;
+    }
+
+    /**
+     * Whether the account itself allows a channel, see RestrictsChannels.
+     */
+    private function allowedFor(string $guard, Authenticatable $user, string $channel): bool
+    {
+        return ! $user instanceof RestrictsChannels || $user->mfaAllowsChannel($channel, $guard);
     }
 
     /**
@@ -185,10 +199,12 @@ class Mfa
      * @param  string|null  $channel  A sending channel; the first available one when left out.
      *
      * @throws ThrottledException
+     * @throws BlockedException When the firewall refuses the address.
      * @throws ConfigurationException When the mail cannot carry a link, see linkUrl().
      */
     public function request(string $guard, string $identifier, ?string $channel = null): void
     {
+        $this->ensureAllowed($guard, $identifier, LoginAttempt::METHOD_REQUEST);
         $this->throttle('request', $guard, $identifier, LoginAttempt::METHOD_REQUEST);
 
         $user = $this->findUser($guard, $identifier);
@@ -201,7 +217,17 @@ class Mfa
 
         $sender = $this->sender($guard, $user, $channel);
 
-        if ($sender === null || ($sender->name() === 'sms' && $this->smsQuotaReached())) {
+        if ($sender === null) {
+            // An account that switched the sending channels off for itself:
+            // the screen goes on as if a message went out, the log knows better.
+            if ($this->restrictsEverySender($guard, $user)) {
+                $this->record($guard, LoginAttempt::NOT_ALLOWED, $channel, $identifier, $user, LoginAttempt::METHOD_REQUEST);
+            }
+
+            return;
+        }
+
+        if ($sender->name() === 'sms' && $this->smsQuotaReached()) {
             return;
         }
 
@@ -233,9 +259,11 @@ class Mfa
      * @param  bool|null  $remember  Keep the user signed in; null follows the guard's "remember" setting.
      *
      * @throws ThrottledException
+     * @throws BlockedException When the firewall refuses the address.
      */
     public function loginWithCode(string $guard, string $identifier, string $code, ?bool $remember = null): ?Authenticatable
     {
+        $this->ensureAllowed($guard, $identifier, LoginAttempt::METHOD_CODE);
         $this->throttle('verify', $guard, $identifier, LoginAttempt::METHOD_CODE);
 
         $user = $this->findUser($guard, $identifier);
@@ -250,6 +278,10 @@ class Mfa
             return $this->fail($guard, LoginAttempt::EXPIRED, $challenge?->channel, $identifier, $user, LoginAttempt::METHOD_CODE);
         }
 
+        if (! $this->allowedFor($guard, $user, $challenge->channel)) {
+            return $this->fail($guard, LoginAttempt::NOT_ALLOWED, $challenge->channel, $identifier, $user, LoginAttempt::METHOD_CODE);
+        }
+
         if (! $challenge->matchesCode(trim($code))) {
             return $this->fail($guard, LoginAttempt::INVALID, $challenge->channel, $identifier, $user, LoginAttempt::METHOD_CODE);
         }
@@ -259,12 +291,56 @@ class Mfa
 
     /**
      * Sign in with something the user types from what they have or know: an
-     * authenticator code, a recovery code or a password.
+     * authenticator code, a recovery code, a PIN or a password.
      *
      * @throws ThrottledException
+     * @throws BlockedException When the firewall refuses the address.
      */
     public function loginWithSecret(string $guard, string $identifier, string $channel, string $input, ?bool $remember = null): ?Authenticatable
     {
+        $verified = $this->verifySecret($guard, $identifier, $channel, $input);
+
+        if ($verified === null) {
+            return null;
+        }
+
+        return $this->complete($guard, $verified['user'], $channel, LoginAttempt::METHOD_SECRET, $identifier, $verified['emergency'], $remember);
+    }
+
+    /**
+     * Check a secret without signing in: the first step of a login that goes
+     * on with a second one, such as a password followed by a mailed code.
+     *
+     * Throttled, judged by the firewall, logged and counted towards a block
+     * exactly like loginWithSecret(); a right answer is logged as "verified".
+     * What follows is up to the application, usually request() and then
+     * loginWithCode().
+     *
+     * @throws ThrottledException
+     * @throws BlockedException When the firewall refuses the address.
+     */
+    public function checkSecret(string $guard, string $identifier, string $channel, string $input): ?Authenticatable
+    {
+        $verified = $this->verifySecret($guard, $identifier, $channel, $input);
+
+        if ($verified === null || $verified['emergency']) {
+            return null;
+        }
+
+        $this->record($guard, LoginAttempt::VERIFIED, $channel, $identifier, $verified['user'], LoginAttempt::METHOD_SECRET);
+
+        return $verified['user'];
+    }
+
+    /**
+     * @return array{user: Authenticatable, emergency: bool}|null
+     *
+     * @throws ThrottledException
+     * @throws BlockedException
+     */
+    private function verifySecret(string $guard, string $identifier, string $channel, string $input): ?array
+    {
+        $this->ensureAllowed($guard, $identifier, LoginAttempt::METHOD_SECRET);
         $this->throttle('verify', $guard, $identifier, LoginAttempt::METHOD_SECRET);
 
         $user = $this->findUser($guard, $identifier);
@@ -273,11 +349,19 @@ class Mfa
             return $this->fail($guard, LoginAttempt::UNKNOWN_ACCOUNT, $channel, $identifier, null, LoginAttempt::METHOD_SECRET);
         }
 
+        if (! Subject::active($user)) {
+            return $this->fail($guard, LoginAttempt::INACTIVE, $channel, $identifier, $user, LoginAttempt::METHOD_SECRET);
+        }
+
         $emergency = false;
 
         if (! in_array($channel, $this->available($guard, $user), true)) {
             if ($channel !== 'password' || ! $this->passwordOnlyAllowed($guard, $user)) {
-                return $this->fail($guard, LoginAttempt::INVALID, $channel, $identifier, $user, LoginAttempt::METHOD_SECRET);
+                $result = $this->registry->has($channel) && ! $this->allowedFor($guard, $user, $channel)
+                    ? LoginAttempt::NOT_ALLOWED
+                    : LoginAttempt::INVALID;
+
+                return $this->fail($guard, $result, $channel, $identifier, $user, LoginAttempt::METHOD_SECRET);
             }
 
             $emergency = true;
@@ -289,12 +373,14 @@ class Mfa
             return $this->fail($guard, LoginAttempt::INVALID, $channel, $identifier, $user, LoginAttempt::METHOD_SECRET);
         }
 
-        return $this->complete($guard, $user, $channel, LoginAttempt::METHOD_SECRET, $identifier, $emergency, $remember);
+        return ['user' => $user, 'emergency' => $emergency];
     }
 
     /**
      * Sign in with the token from a mailed link. A link that was used or has
      * expired is logged for its owner; a token that never existed is not.
+     *
+     * @throws BlockedException When the firewall refuses the address.
      */
     public function loginWithLink(string $token, ?bool $remember = null): ?Authenticatable
     {
@@ -311,8 +397,15 @@ class Mfa
             return null;
         }
 
+        // After the owner is known, so a refusal is logged for them.
+        $this->ensureAllowed($guard, null, LoginAttempt::METHOD_LINK, $user);
+
         if ($challenge->hasExpired()) {
             return $this->fail($guard, LoginAttempt::EXPIRED, $challenge->channel, null, $user, LoginAttempt::METHOD_LINK);
+        }
+
+        if (! $this->allowedFor($guard, $user, $challenge->channel)) {
+            return $this->fail($guard, LoginAttempt::NOT_ALLOWED, $challenge->channel, null, $user, LoginAttempt::METHOD_LINK);
         }
 
         return $this->complete($guard, $user, $challenge->channel, LoginAttempt::METHOD_LINK, null, false, $remember, $challenge);
@@ -345,6 +438,7 @@ class Mfa
                     'method' => $method,
                     'result' => $result,
                     'ip' => request()->ip(),
+                    'country' => $this->firewall->country(request()->ip()),
                     'user_agent' => Str::limit((string) request()->userAgent(), 250, ''),
                 ]);
             } catch (Throwable $exception) {
@@ -377,6 +471,8 @@ class Mfa
 
         $this->guard($guard)->login($user, $remember ?? MfaConfig::remember($guard));
 
+        $this->firewall->clearFailures(request()->ip());
+
         if (request()->hasSession()) {
             $session = request()->session();
             $session->regenerate();
@@ -405,7 +501,42 @@ class Mfa
     {
         $this->record($guard, $result, $channel, $identifier, $user, $method);
 
+        // Wrong guesses count towards a block of the address; asking for a
+        // mail and a stale link do not.
+        if (in_array($result, [LoginAttempt::INVALID, LoginAttempt::UNKNOWN_ACCOUNT], true) && $method !== LoginAttempt::METHOD_REQUEST) {
+            $this->firewall->registerFailure(request()->ip());
+        }
+
         return null;
+    }
+
+    /**
+     * Stop here when the firewall refuses the address of the request.
+     *
+     * @throws BlockedException
+     */
+    private function ensureAllowed(string $guard, ?string $identifier, string $method, ?Authenticatable $user = null): void
+    {
+        $verdict = $this->firewall->decide(request()->ip(), $guard);
+
+        if ($verdict->allowed) {
+            return;
+        }
+
+        $this->record($guard, (string) $verdict->reason, null, $identifier, $user, $method);
+
+        throw new BlockedException((string) $verdict->reason, $verdict->until);
+    }
+
+    /**
+     * Whether the guard has sending channels and the account allows none.
+     */
+    private function restrictsEverySender(string $guard, Authenticatable $user): bool
+    {
+        $senders = array_filter($this->channels($guard), fn (Channel $channel) => $channel instanceof SendsChallenge);
+
+        return $senders !== []
+            && array_filter($senders, fn (Channel $channel) => $this->allowedFor($guard, $user, $channel->name())) === [];
     }
 
     private function sender(string $guard, Authenticatable $user, ?string $channel): ?SendsChallenge

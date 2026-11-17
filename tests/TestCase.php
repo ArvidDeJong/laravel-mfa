@@ -5,20 +5,25 @@ namespace Darvis\Mfa\Tests;
 use Darvis\Mfa\MfaServiceProvider;
 use Darvis\Mfa\Tests\Fixtures\Staff;
 use Darvis\Mfa\Tests\Fixtures\User;
+use Flux\FluxServiceProvider;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Livewire\LivewireServiceProvider;
 use Orchestra\Testbench\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
 {
     protected function getPackageProviders($app)
     {
-        return [MfaServiceProvider::class];
+        // Livewire and Flux, like a host that uses the screens.
+        return [LivewireServiceProvider::class, FluxServiceProvider::class, MfaServiceProvider::class];
     }
 
     protected function getEnvironmentSetUp($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('k', 32)));
+        $app['config']->set('view.paths', [__DIR__.'/Fixtures/views']);
+        $app['config']->set('mfa.ui.layout', 'layouts.app');
         $app['config']->set('database.default', 'testing');
         $app['config']->set('database.connections.testing', [
             'driver' => 'sqlite',
@@ -43,7 +48,9 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
-        foreach (['2026_11_13_000000_create_mfa_challenges_table', '2026_11_13_000001_create_mfa_factors_table', '2026_11_13_000002_create_mfa_login_attempts_table'] as $migration) {
+        Staff::$restricted = [];
+
+        foreach (['2026_11_13_000000_create_mfa_challenges_table', '2026_11_13_000001_create_mfa_factors_table', '2026_11_13_000002_create_mfa_login_attempts_table', '2026_11_13_000003_create_mfa_firewall_rules_table'] as $migration) {
             (require __DIR__.'/../database/migrations/'.$migration.'.php')->up();
         }
 
