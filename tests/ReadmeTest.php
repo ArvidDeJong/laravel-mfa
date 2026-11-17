@@ -10,6 +10,12 @@ it('names the PHP and Laravel versions of composer.json in the README', function
     $composer = json_decode((string) file_get_contents(packageRoot('composer.json')), true, flags: JSON_THROW_ON_ERROR);
     $readme = (string) file_get_contents(packageRoot('README.md'));
 
+    // The CI matrix pins one Laravel version and moves it to require-dev;
+    // the declared range is then gone and there is nothing to compare.
+    if (! isset($composer['require']['laravel/framework'])) {
+        $this->markTestSkipped('composer.json was rewritten for one Laravel version.');
+    }
+
     preg_match('/\d+\.\d+/', $composer['require']['php'], $php);
     preg_match_all('/\^(\d+)/', $composer['require']['laravel/framework'], $laravel);
 

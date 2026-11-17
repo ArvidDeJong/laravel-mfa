@@ -18,6 +18,8 @@ parameters:
             identifier: method.notFound
             message: '#Illuminate\\View\\View::(title|layout)\(\)#'
             path: src/Livewire/Concerns/RendersInLayout.php
+            # Newer Livewire versions describe the macros themselves.
+            reportUnmatched: false
     paths:
         - src
         - database
