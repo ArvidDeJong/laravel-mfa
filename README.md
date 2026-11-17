@@ -338,7 +338,7 @@ No. The package signs people in on session guards, the kind a website and a CMS 
 
 ### Does it support passkeys?
 
-Not yet. Passkeys are planned before version 1.0.
+Not yet. Passkeys follow in a later release.
 
 ### Can an AI coding agent install or migrate it for me?
 

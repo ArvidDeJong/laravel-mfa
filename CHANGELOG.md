@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-17
+
 ### Added
 
 - `Overview` screen (tag `mfa-overview`): whether the firewall is on, the countries each guard may sign in from, who is blocked right now and before, and per user which ways in they have set up and whether they keep one in an outage. Behind the `manageMfa` gate.
