@@ -115,7 +115,8 @@ class Firewall
             return;
         }
 
-        $key = $this->failureKey($ip);
+        $range = self::network($ip);
+        $key = $this->failureKey($range);
 
         RateLimiter::hit($key, MfaConfig::firewallBlockMinutes() * 60);
 
@@ -130,7 +131,7 @@ class Firewall
             'automatic' => true,
             'expires_at' => now()->addMinutes(MfaConfig::firewallBlockMinutes()),
             'note' => 'Too many failed logins',
-            'range' => $ip,
+            'range' => $range,
         ]);
 
         $this->rules = [];
@@ -154,8 +155,35 @@ class Firewall
     public function clearFailures(?string $ip): void
     {
         if ($ip !== null && $ip !== '') {
-            RateLimiter::clear($this->failureKey($ip));
+            RateLimiter::clear($this->failureKey(self::network($ip)));
         }
+    }
+
+    /**
+     * What failed logins from an address are counted and blocked as: the
+     * address itself for IPv4, its network for IPv6 (firewall.ipv6_prefix,
+     * a /64 by default). One IPv6 connection holds more addresses than
+     * anybody can block one by one.
+     */
+    public static function network(string $ip): string
+    {
+        $prefix = MfaConfig::firewallIpv6Prefix();
+        $packed = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === false ? false : inet_pton($ip);
+
+        // The loopback address stays itself, so a block on a developer's
+        // machine reads as ::1.
+        if ($packed === false || $prefix >= 128 || $ip === '::1') {
+            return $ip;
+        }
+
+        $bytes = intdiv($prefix, 8);
+        $network = substr($packed, 0, $bytes);
+
+        if ($prefix % 8 !== 0) {
+            $network .= chr(ord($packed[$bytes]) & (0xFF << (8 - $prefix % 8) & 0xFF));
+        }
+
+        return inet_ntop(str_pad($network, 16, "\0")).'/'.$prefix;
     }
 
     /**
@@ -213,8 +241,8 @@ class Firewall
         )->values();
     }
 
-    private function failureKey(string $ip): string
+    private function failureKey(string $range): string
     {
-        return 'mfa|firewall|'.$ip;
+        return 'mfa|firewall|'.$range;
     }
 }
