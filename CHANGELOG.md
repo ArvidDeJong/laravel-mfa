@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Documentation site in `docs/` for GitHub Pages (Jekyll, Just the Docs): installation, a first login screen, channels, a login in two steps, the firewall, screens for the admin, what to do in an outage, configuration, commands, testing, security, troubleshooting, the migration guides and an FAQ, with `llms.txt` and structured data. `tests/DocsSiteTest.php` keeps the pages in step with the config, the commands and the messages.
+
+### Changed
+
+- The README is the quick start and links to the documentation site.
+
 ## [1.2.0] - 2026-11-17
 
 ### Added

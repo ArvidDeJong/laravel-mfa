@@ -1,0 +1,48 @@
+title: Laravel MFA
+description: Laravel package for two factor authentication and passwordless login per guard, with magic link, emailed code, SMS, authenticator app, recovery codes and a login firewall, built so that login survives an outage.
+url: https://arviddejong.github.io
+baseurl: /laravel-mfa
+
+remote_theme: just-the-docs/just-the-docs@v0.12.0
+plugins:
+  - jekyll-remote-theme
+  - jekyll-relative-links
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+# Facts about the package, used by the structured data and llms.txt.
+package:
+  name: darvis/laravel-mfa
+  repository: https://github.com/ArvidDeJong/laravel-mfa
+  packagist: https://packagist.org/packages/darvis/laravel-mfa
+  license_url: https://github.com/ArvidDeJong/laravel-mfa/blob/main/LICENSE
+  requires: PHP 8.2+, Laravel 11, 12 or 13. Livewire and Flux are optional, for the ready made screens
+  platforms: [Laravel, Livewire]
+  keywords: [laravel mfa, laravel 2fa, two factor authentication, magic link login, passwordless login, totp authenticator, recovery codes, login firewall, geo blocking, brute force protection, multi guard, laravel 13]
+
+# Developer credit in the footer and the structured data.
+developer:
+  company: ARVID.NL
+  url: https://arvid.nl
+
+color_scheme: light
+search_enabled: true
+heading_anchors: true
+
+aux_links:
+  GitHub: https://github.com/ArvidDeJong/laravel-mfa
+  Packagist: https://packagist.org/packages/darvis/laravel-mfa
+aux_links_new_tab: true
+
+gh_edit_link: true
+gh_edit_link_text: Edit this page on GitHub
+gh_edit_repository: https://github.com/ArvidDeJong/laravel-mfa
+gh_edit_branch: main
+gh_edit_source: docs
+gh_edit_view_mode: tree
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      image: /assets/images/social-preview.png

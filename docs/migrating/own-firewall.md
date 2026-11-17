@@ -1,7 +1,8 @@
 ---
 title: "From an own country filter, allow list or login block"
 description: "Move an application's own geo filter, IP allow list and block after failed logins to the firewall of darvis/laravel-mfa, without changing what the user sees."
-nav_order: 2
+nav_order: 17
+parent: "Migrating"
 ---
 
 # From an own country filter, allow list or login block
