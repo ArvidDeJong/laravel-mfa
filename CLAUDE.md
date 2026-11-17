@@ -13,7 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Tables: `mfa_challenges`, `mfa_factors`, `mfa_login_attempts`
 - Tables also: `mfa_firewall_rules`
 - Commands: `mfa:check`, `mfa:emergency`, `mfa:link`, `mfa:prune`, `mfa:allow-ip`, `mfa:unblock-ip`, `mfa:blocked`, `mfa:geoip-update`
-- Status: released, first version 1.0.0. Not built yet: the `passkey` channel (on `laravel/passkeys`), password plus second step as one flow, the docs site, the install command.
+- Status: released, first version 1.0.0. Not built yet: the `passkey` channel (on `laravel/passkeys`), password plus second step as one flow, the install command.
+- `docs/` is the GitHub Pages site. The migration guides live in `docs/migrating/` under the parent page `docs/migrating.md`. `tests/DocsSiteTest.php` fails when a config key, a command or a quoted message is missing from the pages: update the page in the same commit.
 
 ## Architecture
 

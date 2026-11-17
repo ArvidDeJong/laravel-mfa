@@ -1,7 +1,8 @@
 ---
 title: "From a hand written staff login by mail"
 description: "Move a second guard that signs in with a mailed code or link to darvis/laravel-mfa, next to Laravel Fortify."
-nav_order: 1
+nav_order: 16
+parent: "Migrating"
 ---
 
 # From a hand written staff login by mail

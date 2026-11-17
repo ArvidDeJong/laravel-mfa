@@ -1,0 +1,43 @@
+# Questions as people ask them to an assistant. Short, factual answers.
+# Rendered on faq.md, in the FAQPage structured data and in llms.txt.
+- q: What is darvis/laravel-mfa?
+  a: A Laravel package for two factor authentication (2FA) and passwordless login. Every guard gets more than one way to sign in, such as a magic link and code by email, a code by text message, an authenticator app, recovery codes, a password or a PIN at the office. A login firewall adds an IP allow list, a deny list, a country filter and a block after failed logins. It is built so that login survives the day a mail or SMS provider is down.
+
+- q: How do I add two factor authentication to a Laravel application?
+  a: Run `composer require darvis/laravel-mfa`, publish the config, run the migrations and list the guard in `config/mfa.php` with the channels you want, for example `['password', 'authenticator', 'recovery']`. With Livewire and Flux installed, route the `Login` and `Settings` screens; users set up their authenticator app and recovery codes on the settings screen. Without Livewire, call `Mfa::loginWithSecret()` from your own screen.
+
+- q: How do I make a passwordless login with a magic link in Laravel?
+  a: Give the guard the `mail` channel. `Mfa::request($guard, $email)` sends one mail with a link and a code, and either one signs the user in. Add `authenticator` or `recovery` next to it, so login does not depend on email alone.
+
+- q: What happens to login when email is down?
+  a: Users with an authenticator app, recovery codes, a text message or a password keep signing in. `php artisan mfa:check` tells you beforehand which guards would be locked out. During an outage `php artisan mfa:emergency mail --until=18:00` skips the mail channels until that time, and `php artisan mfa:link` gives one user a one time link.
+
+- q: Which PHP and Laravel versions does darvis/laravel-mfa support?
+  a: PHP 8.2 or newer and Laravel 11, 12 and 13. Livewire 3 or 4 and Flux are optional and only needed for the ready made screens.
+
+- q: Can I restrict my Laravel admin or CMS to one country or to the office?
+  a: Yes. Switch the firewall on and set `countries` on the guard of the CMS, such as `['NL']`. The country filter then applies to that guard only and visitors of the site are left alone. An allow rule lets a colleague abroad in until a date, and the `mfa.location` middleware opens routes at the office only.
+
+- q: Does it block brute force attacks on the login?
+  a: Yes. With the firewall on, an IP address is blocked for `firewall.block_minutes` after `firewall.block_after_attempts` wrong tries; for IPv6 that is the whole /64 of the connection. Separately, and also with the firewall off, wrong tries for one account are counted over every address together, so an attack spread over many addresses stops as well.
+
+- q: How do I see who is blocked and which two factor methods my users have?
+  a: Route the `Overview` screen in your admin. It shows whether the firewall is on, the countries each guard may sign in from, the addresses that are blocked right now with the accounts that were tried, and per user the ways in they have set up. `php artisan mfa:blocked` lists the blocked addresses on the command line.
+
+- q: Does it work with Laravel Fortify, Breeze or Jetstream?
+  a: It works next to them. They keep serving their own guard, usually `web`; list the other guards, such as `staff`, in `config/mfa.php`. Do not list a guard that Fortify already serves.
+
+- q: Does it work without Livewire?
+  a: Yes. The facade, the middleware and the commands need no Livewire. With Livewire and Flux installed you also get five ready made screens for login, security settings, a sign-in overview, the firewall and the login log.
+
+- q: Does it work for an API with Laravel Sanctum?
+  a: No. The package signs people in on session guards, the kind a website and a CMS use.
+
+- q: Does it support passkeys?
+  a: Not yet. Passkeys follow in a later release.
+
+- q: Does it send data to another service?
+  a: Only the login mail through your own mailer and, when you use the `sms` channel, the text message through the SMS provider you configure. The authenticator QR code is drawn on your own server and the country lookup reads a local database. Codes, links, secrets and PINs are stored hashed or encrypted.
+
+- q: Can an AI coding agent install or migrate it for me?
+  a: Yes. The package ships a Laravel Boost guideline and skill, and step by step migration guides written for AI agents, one for a hand written login by mail and one for an application with its own country filter or login block.
