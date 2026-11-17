@@ -1,8 +1,33 @@
-# Laravel MFA
+# Laravel MFA: two factor authentication, magic link login and a login firewall for every guard
 
-Login that survives an outage. Give every Laravel guard more than one way in: a mailed link and code, a text message, an authenticator app, recovery codes or a password. The package warns you when all of them lean on the same outside service, and gives you a controlled emergency mode for the day a provider goes down.
+`darvis/laravel-mfa` is a Laravel package for multi factor authentication (MFA, also called two factor authentication or 2FA) and passwordless login. It gives every Laravel guard more than one way to sign in: a magic link and a one time code by email, a code by text message, an authenticator app (TOTP, such as Google Authenticator, Microsoft Authenticator or 1Password), recovery codes, a password or a PIN at the office. A built in login firewall adds an IP allow list, a deny list, a country filter and a block after too many failed logins.
+
+What sets it apart: login that survives an outage. The package warns you when every way in leans on the same outside service, and gives you a controlled emergency mode for the day your mail or SMS provider goes down.
 
 > **Status:** in development, not released yet. Passkeys and the documentation site follow before 1.0.
+
+## In short
+
+| Question | Answer |
+| --- | --- |
+| What is it for? | Signing people in to a Laravel website or CMS with a second factor, or without a password at all |
+| Who is it for? | Any Laravel developer, from a first project to an agency with a `staff` guard next to normal users |
+| What does it need? | PHP 8.2 or newer and Laravel 11, 12 or 13. Livewire and Flux are optional, for the ready made screens |
+| What does it cost? | Nothing. MIT licence |
+| Does it replace Laravel Fortify? | No. It works next to Fortify, for the guards Fortify does not serve |
+
+## Contents
+
+1. [Why this package exists](#why-this-package-exists)
+2. [What it does](#what-it-does)
+3. [New to this? The words explained](#new-to-this-the-words-explained)
+4. [Quick start](#quick-start)
+5. [Screens](#screens)
+6. [Firewall, locations and PIN](#firewall-locations-and-pin)
+7. [Check your setup](#check-your-setup)
+8. [When a provider is down](#when-a-provider-is-down)
+9. [Questions and answers](#questions-and-answers)
+10. [Laravel Boost](#laravel-boost)
 
 ## Why this package exists
 
@@ -22,6 +47,19 @@ That outage is the reason this package exists. Login should never depend on one 
 | `pin` (on site only) | nothing | yes |
 
 It works per guard and next to Laravel Fortify. Fortify serves one guard; list the other guards (for example `staff`) here.
+
+## New to this? The words explained
+
+| Word | What it means here |
+| --- | --- |
+| MFA, 2FA | Multi factor or two factor authentication: proving who you are with more than a password, for example a code from your phone |
+| Guard | Laravel's name for a kind of login. `web` is the default for normal users; many sites add a second one, such as `staff` for the CMS |
+| Channel | One way to sign in: `mail`, `sms`, `authenticator`, `recovery`, `password` or `pin`. You choose per guard which ones are allowed |
+| Magic link | A link in an email that signs you in when you open it. No password needed |
+| One time code (OTP) | A short code that works once and for a few minutes, sent by email or text message |
+| Authenticator app (TOTP) | An app on your phone that shows a new code every 30 seconds. It works without internet and without email |
+| Recovery codes | A list of spare codes to print or save, for when the phone is lost |
+| Firewall | Rules about where a login may come from: which IP addresses and which countries |
 
 ## Requirements
 
@@ -50,7 +88,17 @@ Tell the package which guards it serves, in `config/mfa.php`:
 ],
 ```
 
-Use it from your own login screen:
+The fastest way to a working login, with Livewire and Flux installed, is the screen the package brings. One route is enough:
+
+```php
+use Darvis\Mfa\Livewire\Login;
+
+Route::get('cms/login', Login::class)->defaults('guard', 'staff')->name('cms.login');
+```
+
+Open `/cms/login`, type an email address that exists for that guard, and the code and link arrive by mail. On a development machine set `MAIL_MAILER=log` and read the mail in `storage/logs/laravel.log`.
+
+Building the screen yourself is just as possible. Use the facade from your own login screen:
 
 ```php
 use Darvis\Mfa\Facades\Mfa;
@@ -216,6 +264,48 @@ php artisan mfa:link staff jan@example.com      # one time link for one user
 ```
 
 Users with another working channel keep using it. Only with `MFA_EMERGENCY_PASSWORD_ONLY=true`, and only for users without any working channel, a password alone is accepted. An emergency ends by itself, lasts at most `emergency.max_hours` and every login during it is logged.
+
+## Questions and answers
+
+### How do I add two factor authentication to a Laravel application?
+
+Install the package, list the guard in `config/mfa.php` with the channels you want, for example `['password', 'authenticator', 'recovery']`, and route the `Login` and `Settings` screens. Users set up their authenticator app and recovery codes on the settings screen. See [Quick start](#quick-start).
+
+### How do I make a passwordless login with a magic link in Laravel?
+
+Give the guard the `mail` channel. `Mfa::request($guard, $email)` sends one mail with a link and a code, and the link signs the user in. Add `authenticator` or `sms` next to it, so login does not depend on email alone.
+
+### What happens to login when email is down?
+
+Users with an authenticator app, recovery codes, a text message or a password keep signing in. `php artisan mfa:check` tells you beforehand which guards would be locked out. During an outage `php artisan mfa:emergency mail --until=18:00` skips the mail channels until that time. See [When a provider is down](#when-a-provider-is-down).
+
+### Can I restrict my Laravel admin or CMS to one country or to the office?
+
+Yes. Set `countries` on the guard of the CMS, such as `['NL']`, and the country filter applies to that guard only. Visitors of the site are left alone. An allow list lets a colleague abroad in until a date, and the `mfa.location` middleware opens routes at the office only. See [Firewall, locations and PIN](#firewall-locations-and-pin).
+
+### Does it block brute force attacks on the login?
+
+Yes, with the firewall on. After `firewall.block_after_attempts` wrong tries an IP address is blocked for `firewall.block_minutes`. Somebody who recognises the address can lift the block on the firewall screen, or with `php artisan mfa:unblock-ip`.
+
+### Does it work with Laravel Fortify, Breeze or Jetstream?
+
+It works next to them. They keep serving their own guard, usually `web`; list the other guards, such as `staff`, in `config/mfa.php`. Do not list a guard that Fortify already serves.
+
+### Does it work with Livewire and Flux?
+
+Yes. With both installed you get four ready made screens: login, security settings, firewall and login log. Without them the facade, the middleware and the commands work the same, and you build your own screens.
+
+### Does it work for an API with Laravel Sanctum?
+
+No. The package signs people in on session guards, the kind a website and a CMS use.
+
+### Does it support passkeys?
+
+Not yet. Passkeys are planned before version 1.0.
+
+### Can an AI coding agent install or migrate it for me?
+
+Yes. The package ships a Laravel Boost guideline and skill, and step by step [migration guides](docs/migrating/) written for AI agents: one for a hand written login by mail, one for an application with its own country filter or login block.
 
 ## Laravel Boost
 
