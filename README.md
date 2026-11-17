@@ -27,6 +27,8 @@ It works per guard and next to Laravel Fortify. Fortify serves one guard; list t
 
 PHP 8.2 or newer and Laravel 11, 12 or 13.
 
+The package signs people in on session guards, the kind a website and a CMS use. It is not for a token API such as Laravel Sanctum's.
+
 ## Quick start
 
 ```bash
