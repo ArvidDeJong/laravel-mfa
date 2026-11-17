@@ -9,6 +9,7 @@ use Darvis\Mfa\Channels\PinChannel;
 use Darvis\Mfa\Channels\RecoveryChannel;
 use Darvis\Mfa\Channels\SmsChannel;
 use Darvis\Mfa\Console\AllowIpCommand;
+use Darvis\Mfa\Console\BlockedCommand;
 use Darvis\Mfa\Console\CheckCommand;
 use Darvis\Mfa\Console\EmergencyCommand;
 use Darvis\Mfa\Console\GeoipUpdateCommand;
@@ -23,6 +24,7 @@ use Darvis\Mfa\Http\Middleware\EnsureLocation;
 use Darvis\Mfa\Livewire\FirewallRules;
 use Darvis\Mfa\Livewire\Login;
 use Darvis\Mfa\Livewire\LoginAttempts;
+use Darvis\Mfa\Livewire\Overview;
 use Darvis\Mfa\Livewire\Settings;
 use Darvis\Mfa\Sms\SmsManager;
 use Darvis\Mfa\Support\ChannelRegistry;
@@ -107,6 +109,7 @@ class MfaServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 AllowIpCommand::class,
+                BlockedCommand::class,
                 CheckCommand::class,
                 EmergencyCommand::class,
                 GeoipUpdateCommand::class,
@@ -135,6 +138,7 @@ class MfaServiceProvider extends ServiceProvider
         Livewire::component('mfa-firewall', FirewallRules::class);
         Livewire::component('mfa-login', Login::class);
         Livewire::component('mfa-login-attempts', LoginAttempts::class);
+        Livewire::component('mfa-overview', Overview::class);
         Livewire::component('mfa-settings', Settings::class);
     }
 }

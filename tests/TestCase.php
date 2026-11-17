@@ -50,7 +50,7 @@ abstract class TestCase extends BaseTestCase
 
         Staff::$restricted = [];
 
-        foreach (['2026_11_13_000000_create_mfa_challenges_table', '2026_11_13_000001_create_mfa_factors_table', '2026_11_13_000002_create_mfa_login_attempts_table', '2026_11_13_000003_create_mfa_firewall_rules_table'] as $migration) {
+        foreach (['2026_11_13_000000_create_mfa_challenges_table', '2026_11_13_000001_create_mfa_factors_table', '2026_11_13_000002_create_mfa_login_attempts_table', '2026_11_13_000003_create_mfa_firewall_rules_table', '2026_11_17_000000_add_identifiers_to_mfa_firewall_rules_table'] as $migration) {
             (require __DIR__.'/../database/migrations/'.$migration.'.php')->up();
         }
 

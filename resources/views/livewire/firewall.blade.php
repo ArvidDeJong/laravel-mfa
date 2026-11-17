@@ -83,7 +83,7 @@
                             @if ($rule->guard)<flux:badge color="zinc">{{ $rule->guard }}</flux:badge>@endif
                         </div>
                     </flux:table.cell>
-                    <flux:table.cell>{{ $rule->automatic ? __('mfa::mfa.blocked_attempts') : $rule->note }}</flux:table.cell>
+                    <flux:table.cell>{{ $rule->automatic ? (implode(', ', $rule->identifiers ?? []) ?: __('mfa::mfa.blocked_attempts')) : $rule->note }}</flux:table.cell>
                     <flux:table.cell>{{ $rule->expires_at?->isoFormat('LLL') }}</flux:table.cell>
                     <flux:table.cell>
                         <flux:button size="sm" variant="ghost" wire:click="remove({{ $rule->id }})" wire:confirm="{{ __('mfa::mfa.settings_remove_confirm') }}">

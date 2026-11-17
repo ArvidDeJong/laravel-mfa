@@ -5,7 +5,10 @@ namespace Darvis\Mfa\Firewall;
 use Darvis\Mfa\Models\FirewallRule;
 use Darvis\Mfa\Support\MfaConfig;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\IpUtils;
 
 /**
@@ -19,6 +22,11 @@ use Symfony\Component\HttpFoundation\IpUtils;
  */
 class Firewall
 {
+    /**
+     * How many of the accounts that were tried a block remembers.
+     */
+    private const REMEMBERED_IDENTIFIERS = 5;
+
     /** @var array<string, Collection<int, FirewallRule>> */
     private array $rules = [];
 
@@ -107,9 +115,10 @@ class Firewall
 
     /**
      * Count a failed login from an address and block the address once it has
-     * failed too often in a row.
+     * failed too often in a row. Pass what was typed as the account, so the
+     * block remembers who was tried.
      */
-    public function registerFailure(?string $ip): void
+    public function registerFailure(?string $ip, ?string $identifier = null): void
     {
         if (! $this->enabled() || $ip === null || $ip === '' || $this->neverBlocked($ip)) {
             return;
@@ -117,14 +126,31 @@ class Firewall
 
         $range = self::network($ip);
         $key = $this->failureKey($range);
+        $seconds = MfaConfig::firewallBlockMinutes() * 60;
 
-        RateLimiter::hit($key, MfaConfig::firewallBlockMinutes() * 60);
+        RateLimiter::hit($key, $seconds);
+
+        // Who was tried, so a block can say more than an address: a colleague
+        // with a typo looks different from a list of names.
+        $tried = array_values(array_filter((array) Cache::get($key.'|who', [])));
+        $identifier = Str::limit(Str::lower(trim((string) $identifier)), 190, '');
+
+        if ($identifier !== '' && ! in_array($identifier, $tried, true)) {
+            $tried = array_slice([...$tried, $identifier], -self::REMEMBERED_IDENTIFIERS);
+        }
 
         if (RateLimiter::attempts($key) < MfaConfig::firewallBlockAfterAttempts()) {
+            Cache::put($key.'|who', $tried, $seconds);
+
             return;
         }
 
         RateLimiter::clear($key);
+        Cache::forget($key.'|who');
+
+        // An application that updated the package and has not migrated yet
+        // must still be able to block.
+        $remembers = $tried !== [] && Schema::hasColumn((new FirewallRule)->getTable(), 'identifiers');
 
         FirewallRule::query()->create([
             'action' => FirewallRule::DENY,
@@ -132,7 +158,7 @@ class Firewall
             'expires_at' => now()->addMinutes(MfaConfig::firewallBlockMinutes()),
             'note' => 'Too many failed logins',
             'range' => $range,
-        ]);
+        ] + ($remembers ? ['identifiers' => $tried] : []));
 
         $this->rules = [];
     }
@@ -156,6 +182,7 @@ class Firewall
     {
         if ($ip !== null && $ip !== '') {
             RateLimiter::clear($this->failureKey(self::network($ip)));
+            Cache::forget($this->failureKey(self::network($ip)).'|who');
         }
     }
 

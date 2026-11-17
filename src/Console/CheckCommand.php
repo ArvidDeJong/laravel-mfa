@@ -6,6 +6,7 @@ use Darvis\Mfa\Contracts\Channel;
 use Darvis\Mfa\Mfa;
 use Darvis\Mfa\Support\Emergency;
 use Darvis\Mfa\Support\MfaConfig;
+use Darvis\Mfa\Support\Overview;
 use Illuminate\Auth\EloquentUserProvider;
 use Illuminate\Console\Command;
 
@@ -70,18 +71,12 @@ class CheckCommand extends Command
         $total = 0;
         $covered = 0;
 
+        $overview = $this->laravel->make(Overview::class);
+
         foreach ($provider->createModel()->newQuery()->lazy() as $user) {
             $total++;
 
-            $dependencies = [];
-
-            foreach ($channels as $channel) {
-                if ($channel->enrolled($user)) {
-                    $dependencies[] = $channel->dependency();
-                }
-            }
-
-            if (in_array(null, $dependencies, true) || count(array_unique($dependencies)) > 1) {
+            if ($overview->hasFallback($guard, $user)) {
                 $covered++;
             }
         }

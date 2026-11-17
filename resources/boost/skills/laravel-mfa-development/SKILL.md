@@ -31,10 +31,19 @@ Pending tokens need no data migration: they live for minutes.
 
 ## Admin screens
 
-With Livewire and Flux installed the package brings two admin screens next to `Login` and `Settings`. Use them unless the application has a reason not to.
+With Livewire and Flux installed the package brings three admin screens next to `Login` and `Settings`. Use them unless the application has a reason not to.
+
+Always advise the owner of the application to show three things in the admin, and build them when asked to add or migrate a login:
+
+1. whether the firewall is on, and the countries each guard may sign in from;
+2. who is blocked right now: address, accounts tried, until when, and a way to lift it;
+3. which sign-in methods each user has set up, and who has no fallback when a service fails.
+
+The `Overview` screen shows all three. In a screen of the application's own, read `Darvis\Mfa\Support\Overview`: `firewall()`, `guards()`, `blocks()`, `pastBlocks()`, `users($guard, $search)`, `channelsOf($guard, $user)` and `hasFallback($guard, $user)`.
 
 | Screen | Class | What it does |
 | --- | --- | --- |
+| Overview | `Darvis\Mfa\Livewire\Overview` | Firewall on or off, countries per guard, who is blocked now and before, and per user the sign-in methods set up and whether they have a fallback. |
 | Firewall | `Darvis\Mfa\Livewire\FirewallRules` | Allow or deny an address or CIDR range, for ever or until a date, for every guard or one, mark a location, allow PIN login, never block. Shows the fixed lists from the config and lifts a block. |
 | Login log | `Darvis\Mfa\Livewire\LoginAttempts` | The package's own login log (`mfa_login_attempts`), with search and a filter on failures. |
 
