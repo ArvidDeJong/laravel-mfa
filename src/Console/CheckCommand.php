@@ -6,8 +6,10 @@ use Darvis\Mfa\Contracts\Channel;
 use Darvis\Mfa\Mfa;
 use Darvis\Mfa\Support\Emergency;
 use Darvis\Mfa\Support\MfaConfig;
+use Darvis\Mfa\Support\Overview;
 use Illuminate\Auth\EloquentUserProvider;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Auth\Authenticatable;
 
 /**
  * Reports, per guard, whether login survives the loss of one outside service
@@ -73,15 +75,7 @@ class CheckCommand extends Command
         foreach ($provider->createModel()->newQuery()->lazy() as $user) {
             $total++;
 
-            $dependencies = [];
-
-            foreach ($channels as $channel) {
-                if ($channel->enrolled($user)) {
-                    $dependencies[] = $channel->dependency();
-                }
-            }
-
-            if (in_array(null, $dependencies, true) || count(array_unique($dependencies)) > 1) {
+            if ($user instanceof Authenticatable && $this->laravel->make(Overview::class)->hasFallback($guard, $user)) {
                 $covered++;
             }
         }

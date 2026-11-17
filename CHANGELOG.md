@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Overview` screen (tag `mfa-overview`): whether the firewall is on, the countries each guard may sign in from, who is blocked right now and before, and per user which ways in they have set up and whether they keep one in an outage. Behind the `manageMfa` gate.
+- `Darvis\Mfa\Support\Overview` gives the same answers to an application with an admin of its own: `firewall()`, `guards()`, `blocks()`, `pastBlocks()`, `users()`, `channelsOf()` and `hasFallback()`.
+- A block for failed logins remembers which accounts were tried (`mfa_firewall_rules.identifiers`, a new migration). `Firewall::registerFailure()` takes what was typed as a second, optional argument; the firewall screen shows it.
+- `php artisan mfa:blocked` lists the addresses that are blocked right now, with the accounts that were tried.
+- The README, the Boost guideline and the skill advise to show the firewall, the allowed countries, the blocked addresses and the sign-in methods per user in the application's admin.
+
 ## [1.1.0] - 2026-11-17
 
 ### Security

@@ -140,18 +140,20 @@ A code or link works once. After a login it stays behind as used, so opening the
 
 ## Screens
 
-With Livewire and Flux installed the package brings four screens. Route them yourself and name the guard as a route default:
+With Livewire and Flux installed the package brings five screens. Route them yourself and name the guard as a route default:
 
 ```php
 use Darvis\Mfa\Livewire\FirewallRules;
 use Darvis\Mfa\Livewire\Login;
 use Darvis\Mfa\Livewire\LoginAttempts;
+use Darvis\Mfa\Livewire\Overview;
 use Darvis\Mfa\Livewire\Settings;
 
 Route::get('admin/login', Login::class)->defaults('guard', 'staff')->name('cms.login');
 
 Route::middleware('auth:staff')->group(function () {
     Route::get('admin/security', Settings::class)->defaults('guard', 'staff');
+    Route::get('admin/sign-in', Overview::class);
     Route::get('admin/firewall', FirewallRules::class);
     Route::get('admin/login-attempts', LoginAttempts::class);
 });
@@ -189,6 +191,30 @@ Keeping a screen of your own, because the application has its own login log or i
 
 The views can be published with `php artisan vendor:publish --tag=mfa-views`.
 
+### Show it in your admin
+
+Whoever manages an application should be able to see how signing in is set up, without reading the config. Give the admin one place that shows:
+
+1. whether the firewall is on, and from which countries each guard may sign in;
+2. who is blocked right now: the address, the accounts that were tried, until when, and a way to lift it;
+3. which ways in each user has set up, and who has no fallback when mail or text messages fail.
+
+The `Overview` screen shows all three. With an admin of your own, read the same answers from `Darvis\Mfa\Support\Overview`:
+
+```php
+use Darvis\Mfa\Support\Overview;
+
+$overview = app(Overview::class);
+
+$overview->firewall();          // enabled, and the fixed allow, deny and location lists
+$overview->guards();            // per guard: channels, countries, resilient, skipped in an emergency
+$overview->blocks();            // blocked now; each rule has range, identifiers and expires_at
+$overview->pastBlocks();        // blocked before, with lifted_by
+$overview->users('staff');      // paginated: identifier, channels set up, fallback
+```
+
+On a server, `php artisan mfa:blocked` lists who is blocked and `php artisan mfa:check` how many users have a fallback.
+
 ## Firewall, locations and PIN
 
 Off by default; switch it on with `MFA_FIREWALL=true`. Every login is judged in a fixed order: the deny list, the block for too many failed logins, the allow list and locations, the country filter.
@@ -208,6 +234,7 @@ Rules that come and go live in the database and can end on a date. Add them on t
 ```bash
 php artisan mfa:allow-ip 203.0.113.9 --until=2026-11-25 --note="Timo, hotel Istanbul"
 php artisan mfa:allow-ip 198.51.100.7 --location --pin --never-block --note="Warehouse"
+php artisan mfa:blocked                  # who is blocked right now, and which accounts were tried
 php artisan mfa:unblock-ip 203.0.113.9   # locked yourself out with wrong passwords
 ```
 
@@ -293,13 +320,17 @@ Yes. Set `countries` on the guard of the CMS, such as `['NL']`, and the country 
 
 Yes, with the firewall on. After `firewall.block_after_attempts` wrong tries an IP address is blocked for `firewall.block_minutes`. For IPv6 that is the whole /64 of the connection. Separately, and also with the firewall off, wrong tries for one account are counted over every address together, so an attack spread over many addresses stops as well. Somebody who recognises the address can lift the block on the firewall screen, or with `php artisan mfa:unblock-ip`.
 
+### How do I see who is blocked and which two factor methods my users have?
+
+Route the `Overview` screen in your admin. It shows whether the firewall is on, the countries each guard may sign in from, the addresses that are blocked right now with the accounts that were tried, and per user the ways in they have set up. `php artisan mfa:blocked` gives the blocked addresses on the command line.
+
 ### Does it work with Laravel Fortify, Breeze or Jetstream?
 
 It works next to them. They keep serving their own guard, usually `web`; list the other guards, such as `staff`, in `config/mfa.php`. Do not list a guard that Fortify already serves.
 
 ### Does it work with Livewire and Flux?
 
-Yes. With both installed you get four ready made screens: login, security settings, firewall and login log. Without them the facade, the middleware and the commands work the same, and you build your own screens.
+Yes. With both installed you get five ready made screens: login, security settings, a sign-in overview, firewall and login log. Without them the facade, the middleware and the commands work the same, and you build your own screens.
 
 ### Does it work for an API with Laravel Sanctum?
 

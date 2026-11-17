@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $range
  * @property string|null $guard
  * @property string|null $note
+ * @property list<string>|null $identifiers
  * @property bool $is_location
  * @property bool $allows_pin
  * @property bool $never_block
@@ -90,6 +91,7 @@ class FirewallRule extends Model
             'allows_pin' => 'boolean',
             'automatic' => 'boolean',
             'expires_at' => 'datetime',
+            'identifiers' => 'array',
             'is_location' => 'boolean',
             'lifted_at' => 'datetime',
             'never_block' => 'boolean',

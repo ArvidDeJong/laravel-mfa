@@ -529,7 +529,7 @@ class Mfa
         // Wrong guesses count towards a block of the address; asking for a
         // mail and a stale link do not.
         if (in_array($result, [LoginAttempt::INVALID, LoginAttempt::UNKNOWN_ACCOUNT], true) && $method !== LoginAttempt::METHOD_REQUEST) {
-            $this->firewall->registerFailure(request()->ip());
+            $this->firewall->registerFailure(request()->ip(), $identifier);
         }
 
         return null;
